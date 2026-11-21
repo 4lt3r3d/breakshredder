@@ -1,0 +1,12 @@
+{
+  "port": 5077,
+  "max_source_minutes": 15,
+  "max_height": 1080,
+  "tool_paths": {
+    "yt-dlp": "",
+    "ffmpeg": "",
+    "ffprobe": "",
+    "deno": "",
+    "node": ""
+  }
+}

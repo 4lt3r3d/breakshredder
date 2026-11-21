@@ -1,0 +1,2058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BREAKSHREDDER</title>
+<link rel="icon" href="data:,">
+<!-- Stop dark-mode extensions and the browser's forced dark mode from recolouring the page.
+     They re-process every pad in the slice bank, which is slow, and the page has its own colours. -->
+<meta name="color-scheme" content="only light">
+<meta name="darkreader-lock">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+/* Light or dark, remembered between visits. Set here, before anything is drawn. */
+try { if (localStorage.getItem("breakshredder-theme") === "dark") { document.documentElement.dataset.theme = "dark"; } } catch (e) {}
+</script>
+<style>
+/* ------------------------------------------------------------------
+   BREAKSHREDDER - milestone 1 page
+   Direction: modern Swedish brutalism, kept quiet.
+   THREE colours only: concrete, black, one yellow.
+   Dark mode is the same page with concrete and black swapped and red in place of yellow.
+   Bahnschrift (DIN, ships with Windows 10). Heavy black rules.
+   No radius, no shadow, no gradient, no transitions.
+------------------------------------------------------------------- */
+:root {
+  --ground: #e4e2dc;
+  --ink: #000;
+  --hi: #ffe500;
+  --rule: 4px;
+  color-scheme: only light;
+  --din: Bahnschrift, "DIN Alternate", "DIN Condensed", "Arial Narrow", sans-serif;
+  --mono: "Cascadia Mono", Consolas, "Lucida Console", monospace;
+  --screen: #000;          /* behind video and thumbnails: black in both themes */
+  --screen-ink: #e4e2dc;
+}
+:root[data-theme=dark] {
+  --ground: #000;
+  --ink: #e4e2dc;
+  --hi: #d60000;
+  color-scheme: only dark;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; border-radius: 0; }
+html, body { background: var(--ground); color: var(--ink); }
+body { font-family: var(--din); font-size: 15px; line-height: 1.25; overflow-x: hidden; }
+button, input { font: inherit; color: inherit; border-radius: 0; }
+:focus-visible { outline: var(--rule) solid var(--ink); outline-offset: calc(var(--rule) * -1); }
+::selection { background: var(--ink); color: var(--ground); }
+
+.small { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.big { font-weight: 700; font-stretch: 75%; letter-spacing: -.02em; text-transform: uppercase; }
+
+/* --- wordmark ---------------------------------------------------- */
+.mark { border-bottom: var(--rule) solid var(--ink); overflow: hidden; padding: 0 8px; }
+.mark h1 { font-weight: 700; font-stretch: 75%; letter-spacing: -.045em; line-height: .78; white-space: nowrap;
+           text-transform: uppercase; font-size: 200px; padding: .1em 0 .04em; display: inline-block; }
+
+/* --- source ------------------------------------------------------ */
+.source { display: grid; grid-template-columns: 1fr 200px; border-bottom: var(--rule) solid var(--ink); height: 84px; }
+.source input { border: 0; background: transparent; font-size: 34px; font-weight: 600; font-stretch: 85%; padding: 0 16px; min-width: 0; }
+.source input::placeholder { color: var(--ink); opacity: .3; text-transform: uppercase; }
+.source input:focus { outline: none; }
+.source button { border: 0; background: var(--ink); color: var(--ground); font-size: 40px; cursor: pointer; text-align: left; padding: 0 16px; }
+.source button:hover { background: var(--hi); color: var(--ink); }
+.source button:disabled { opacity: .3; cursor: default; background: var(--ink); color: var(--ground); }
+
+/* --- status line (doubles as the progress bar) ------------------- */
+.status { display: grid; grid-template-columns: 1fr 96px; height: 34px; border-bottom: var(--rule) solid var(--ink); }
+.status .meter { position: relative; min-width: 0; }
+.status button { border: 0; border-left: var(--rule) solid var(--ink); background: var(--ground); cursor: pointer; text-align: left; padding: 0 16px; }
+.status button:hover { background: var(--hi); }
+.status .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--hi); }
+.status .text { position: absolute; inset: 0; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; }
+
+/* --- main: preview + side ---------------------------------------- */
+.main { display: grid; grid-template-columns: 70fr 30fr; }
+.preview { border-right: var(--rule) solid var(--ink); min-width: 0; }
+.screen { position: relative; background: var(--screen); aspect-ratio: 16 / 9; }
+.screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; background: var(--screen); }
+.screen .empty { position: absolute; left: 16px; bottom: 12px; color: var(--screen-ink); font-size: 64px; line-height: .9; }
+.transport { display: grid; grid-template-columns: 130px 230px 1fr; border-top: var(--rule) solid var(--ink); border-bottom: var(--rule) solid var(--ink); height: 60px; }
+.transport button { border: 0; border-right: var(--rule) solid var(--ink); background: var(--ground); font-size: 34px; text-align: left; padding: 0 16px; cursor: pointer; }
+.transport button:hover, .transport button.on { background: var(--hi); }
+.transport button:disabled { opacity: .3; cursor: default; background: var(--ground); }
+.transport .time { border-right: var(--rule) solid var(--ink); padding: 0 16px; display: flex; align-items: center; font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scrub { position: relative; cursor: pointer; }
+.scrub .head { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ink); }
+.titleline { padding: 12px 16px 28px; font-size: 24px; font-weight: 600; font-stretch: 85%; line-height: 1.05; overflow-wrap: anywhere; }
+
+.side { min-width: 0; }
+.block { border-bottom: var(--rule) solid var(--ink); padding: 12px 16px 16px; }
+.block:last-child { border-bottom: 0; }
+.block > .small { display: block; margin-bottom: 10px; }
+
+.tools { display: flex; flex-wrap: wrap; gap: 4px 14px; font-weight: 700; text-transform: uppercase; }
+.tools .bad { background: var(--ink); color: var(--ground); padding: 0 6px; }
+
+.log { font-family: var(--mono); font-size: 12px; line-height: 1.5; height: 220px; overflow-y: auto; margin: 0 -16px; }
+.log div { padding: 0 16px; display: grid; grid-template-columns: 70px 1fr; }
+.log div.e { background: var(--ink); color: var(--ground); }
+
+.cache { margin: 0 -16px; }
+.cache button { display: grid; grid-template-columns: 1fr 56px; gap: 8px; width: 100%; border: 0; background: transparent; text-align: left; padding: 5px 16px; cursor: pointer; font-size: 15px; font-weight: 600; }
+.cache button:hover { background: var(--hi); }
+.cache button span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.cache .none { padding: 0 16px; opacity: .45; }
+
+/* --- trim + analyze ---------------------------------------------- */
+.trim { display: grid; grid-template-columns: 1fr 1fr 110px 200px; border-top: var(--rule) solid var(--ink); height: 60px; }
+.trim button { border: 0; border-right: var(--rule) solid var(--ink); background: var(--ground); font-size: 26px; text-align: left; padding: 0 16px; cursor: pointer; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trim button:last-child { border-right: 0; background: var(--ink); color: var(--ground); font-size: 34px; }
+.trim button:hover { background: var(--hi); color: var(--ink); }
+.trim button:disabled { opacity: .3; cursor: default; background: var(--ground); color: var(--ink); }
+.trim button:last-child:disabled { background: var(--ink); color: var(--ground); }
+
+/* --- slice bank --------------------------------------------------- */
+.bank { border-top: var(--rule) solid var(--ink); }
+.bankhead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 16px; padding: 12px 16px 10px; }
+.bankhead .big { font-size: 40px; line-height: 1; }
+.bar { display: flex; flex-wrap: wrap; align-items: stretch; border-top: var(--rule) solid var(--ink); background: var(--ground); }
+.bar button { border: 0; border-right: 1px solid var(--ink); background: var(--ground); padding: 9px 12px; cursor: pointer;
+              font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.bar button.on { background: var(--ink); color: var(--ground); }
+.bar button:hover { background: var(--hi); color: var(--ink); }
+.bar button:disabled { opacity: .3; cursor: default; background: var(--ground); color: var(--ink); }
+.pager span { padding: 9px 12px; font-variant-numeric: tabular-nums; }
+.detail { position: sticky; top: 0; z-index: 2; border-bottom: var(--rule) solid var(--ink); }
+.detail .info { flex: 1; min-width: 320px; padding: 9px 16px; font-variant-numeric: tabular-nums; }
+.detail button:first-of-type { border-left: 1px solid var(--ink); }
+
+.pads { display: grid; grid-template-columns: repeat(auto-fill, 97px); }
+.pad { display: block; width: 97px; border: 0; border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink);
+       background: var(--ground); padding: 0; cursor: pointer; text-align: left; }
+.pad .th { display: block; width: 96px; height: 54px; background-color: var(--screen); background-image: var(--sprite);
+           background-repeat: no-repeat; }
+.pad canvas { display: block; width: 96px; height: 22px; }
+.pad .lab { display: flex; justify-content: space-between; padding: 2px 5px 3px; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pad:hover .lab { background: var(--hi); }
+.pad.locked .lab { background: var(--ink); color: var(--ground); }
+.pad.del { opacity: .2; }
+.pad.sel { outline: var(--rule) solid var(--hi); outline-offset: calc(var(--rule) * -1); }
+.pad.off { display: none; }
+
+/* --- break engine (milestone 3) ----------------------------------- */
+.engine { border-top: var(--rule) solid var(--ink); }
+.bar label { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-right: 1px solid var(--ink);
+             font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.bar input[type=number] { width: 86px; border: 0; background: transparent; font-size: 17px; font-weight: 700; letter-spacing: 0; padding: 6px 0; }
+.bar input[type=number]:focus { outline: none; background: var(--hi); color: var(--ink); }
+.ops { display: grid; grid-template-columns: repeat(9, 1fr); border-top: var(--rule) solid var(--ink); }
+.ops > div { border-right: 1px solid var(--ink); padding: 8px 12px 6px; min-width: 0; }
+.ops > div:last-child { border-right: 0; }
+.ops.mix { grid-template-columns: repeat(9, 1fr); }
+.ops.snd { grid-template-columns: repeat(6, 1fr); border-top: 1px solid var(--ink); }
+.ops.snd > div:last-child { border-right: 1px solid var(--ink); }
+.ops b i { font-style: normal; font-size: 11px; letter-spacing: .1em; margin-left: 3px; }
+.bar .note { flex: 1; min-width: 240px; padding: 9px 12px; }
+.bar .note + button { border-left: 1px solid var(--ink); }
+input[type=range]:disabled { opacity: .3; cursor: default; }
+.ops.mix > div:nth-child(3) { border-right: var(--rule) solid var(--ink); }   /* group levels | single instruments */
+.ops .row { display: flex; justify-content: space-between; align-items: baseline; }
+.ops b { font-size: 24px; font-stretch: 75%; font-variant-numeric: tabular-nums; line-height: 1; }
+input[type=range] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 24px; background: transparent; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: 4px; background: var(--ink); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 22px; margin-top: -9px; background: var(--ink); border: 0; border-radius: 0; }
+input[type=range]:hover::-webkit-slider-thumb { background: var(--hi); outline: 2px solid var(--ink); }
+.bars { display: grid; grid-template-columns: repeat(8, 1fr); border-top: var(--rule) solid var(--ink); }
+.barcell { display: block; border: 0; border-right: 1px solid var(--ink); border-bottom: 1px solid var(--ink); background: var(--ground); padding: 0; cursor: pointer; text-align: left; min-width: 0; }
+.barcell .bh { display: flex; justify-content: space-between; padding: 3px 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; font-variant-numeric: tabular-nums; }
+.barcell canvas { display: block; width: 100%; height: 48px; }
+.barcell.locked .bh { background: var(--ink); color: var(--ground); }
+.barcell.now .bh { background: var(--hi); color: var(--ink); }
+.barcell.sel { outline: var(--rule) solid var(--hi); outline-offset: calc(var(--rule) * -1); }
+
+@media (max-width: 1000px) {
+  .ops, .ops.mix, .ops.snd { grid-template-columns: repeat(3, 1fr); }
+  .ops.mix > div:nth-child(3) { border-right: 0; }
+  .bars { grid-template-columns: repeat(4, 1fr); }
+  .main { grid-template-columns: 1fr; }
+  .preview { border-right: 0; }
+  .side { border-top: var(--rule) solid var(--ink); }
+}
+</style>
+</head>
+<body>
+
+<div class="mark" id="mark"><h1 id="markText">Breakshredder</h1></div>
+
+<form class="source" id="form" autocomplete="off">
+  <input id="url" type="text" placeholder="Paste YouTube link" spellcheck="false" aria-label="YouTube link">
+  <button class="big" id="go" type="submit">Fetch</button>
+</form>
+
+<div class="status">
+  <div class="meter">
+    <div class="fill" id="fill"></div>
+    <div class="text small"><span id="stage">Idle</span><span id="rate"></span></div>
+  </div>
+  <button type="button" class="small" id="theme" title="Switch between the light and dark colours"></button>
+</div>
+
+<div class="main">
+  <section class="preview">
+    <div class="screen">
+      <video id="vid" preload="metadata" playsinline></video>
+      <span class="empty big" id="empty">No source</span>
+    </div>
+    <div class="transport">
+      <button class="big" id="play" type="button" disabled>Play</button>
+      <div class="time" id="time">00:00.0 / 00:00</div>
+      <div class="scrub" id="scrub"><div class="head" id="head"></div></div>
+    </div>
+    <div class="titleline" id="title"></div>
+    <div class="trim">
+      <button class="big" id="setIn" type="button" disabled title="Set the start of the section to analyze to the current position">In 00:00.0</button>
+      <button class="big" id="setOut" type="button" disabled title="Set the end of the section to analyze to the current position">Out 00:00.0</button>
+      <button class="big" id="clearTrim" type="button" disabled title="Use the whole video">Full</button>
+      <button class="big" id="analyze" type="button" disabled>Analyze</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="block">
+      <span class="small">Tools</span>
+      <div class="tools" id="tools"></div>
+    </div>
+    <div class="block">
+      <span class="small">Log</span>
+      <div class="log" id="log"></div>
+    </div>
+    <div class="block">
+      <span class="small">Cache</span>
+      <div class="cache" id="cache"></div>
+    </div>
+  </aside>
+</div>
+
+<section class="engine" id="engine" hidden>
+  <div class="bankhead"><span class="big">Break engine</span><span class="small" id="engInfo"></span></div>
+  <div class="bar">
+    <button type="button" id="engPlay">Play</button>
+    <button type="button" id="engGen">Generate</button>
+    <label>BPM <input type="number" id="engBpm" min="60" max="300" step="1" value="174"></label>
+    <label>Bars <input type="number" id="engBars" min="2" max="64" step="2" value="16"></label>
+    <label>Seed <input type="number" id="engSeed" min="0" step="1" value="1" style="width:120px"></label>
+    <button type="button" id="engNewSeed">New seed</button>
+    <button type="button" id="engForm" class="on" title="Intro, build, drop, interlude, heavier drop, outro. Off = full break in every bar.">Song form</button>
+    <button type="button" id="engRegen" disabled>Regenerate bar</button>
+    <button type="button" id="engLock" disabled>Lock bar</button>
+  </div>
+  <div class="bar">
+    <label>Export</label>
+    <button type="button" class="exp" data-mode="audio" title="The finished mix as a sound file, no picture">Audio only: WAV</button>
+    <button type="button" class="exp" data-mode="video" title="The same picture edit with no sound track">Video only: silent MP4</button>
+    <button type="button" class="exp on" data-mode="both" id="engRender" title="The picture edit with the finished mix">Audio + video: MP4</button>
+  </div>
+  <div class="bar" id="instruments"><label>Samples</label></div>
+  <div class="ops mix" id="mixer"></div>
+  <div class="bar" id="soundBar"><label>Sound</label></div>
+  <div id="soundPanel" hidden></div>
+  <div class="ops" id="ops"></div>
+  <div class="bars" id="bars"></div>
+</section>
+
+<section class="bank" id="bank" hidden>
+  <div class="bankhead"><span class="big">Slice bank</span><span class="small" id="bankInfo"></span></div>
+  <div class="bar" id="filters"></div>
+  <div class="bar pager">
+    <button type="button" id="pagePrev">Prev page</button>
+    <button type="button" id="pageNext">Next page</button>
+    <span class="small" id="pageInfo"></span>
+  </div>
+  <div class="bar detail">
+    <span class="info small" id="selInfo">Click a pad to hear and see it</span>
+    <span id="tagBtns" style="display:contents"></span>
+    <button type="button" id="lockBtn" disabled>Lock</button>
+    <button type="button" id="delBtn" disabled>Delete</button>
+  </div>
+  <div class="pads" id="pads"></div>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var vid = $("vid"), logEl = $("log");
+  var polling = null, logCount = 0;
+
+  /* milestone 2 state */
+  var TAGS = ["KICK", "SNARE", "HAT", "TONAL", "NOISE", "VOCAL"];
+  var cur = null;                 // { meta, a (analysis), ov (user changes), sel, filter }
+  var trimIn = 0, trimOut = 0;
+  var actx = null, asrc = null, stopTimer = null, saveTimer = null;
+  var PAGE = 96;                  // pads drawn at once; the rest are reached with Prev/Next page
+  var clips = {}, clipWait = {};  // decoded audio per slice, loaded only when a slice is needed
+
+  /* ---- wordmark: scale the type so it fills the full width ------- */
+  function fitMark() {
+    var box = $("mark"), text = $("markText");
+    text.style.fontSize = "200px";
+    var room = box.clientWidth - 16;
+    text.style.fontSize = Math.floor(200 * room / text.offsetWidth) + "px";
+  }
+  window.addEventListener("resize", fitMark);
+  if (document.fonts && document.fonts.ready) { document.fonts.ready.then(fitMark); }
+  fitMark();
+
+  /* ---- helpers ---------------------------------------------------- */
+  function clock() { return new Date().toTimeString().slice(0, 8); }
+  function log(msg, isError, t) {
+    var row = document.createElement("div");
+    if (isError) { row.className = "e"; }
+    var a = document.createElement("span"); a.textContent = t || clock();
+    var b = document.createElement("span"); b.textContent = msg;
+    row.appendChild(a); row.appendChild(b);
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function fmt(sec) {
+    if (!isFinite(sec)) { sec = 0; }
+    var m = Math.floor(sec / 60), s = sec - m * 60;
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s.toFixed(1);
+  }
+  function setStatus(stage, rate, pct) {
+    $("stage").textContent = stage;
+    $("rate").textContent = rate || "";
+    $("fill").style.width = (pct || 0) + "%";
+  }
+  function api(path, options) {
+    return fetch(path, options).then(function (r) {
+      return r.json().then(function (data) { return { ok: r.ok, data: data }; });
+    });
+  }
+  function offline() { log("Server not reachable. Is start.bat still running?", true); setStatus("Offline"); }
+
+  /* ---- tools ------------------------------------------------------- */
+  function loadStatus() {
+    api("/api/status").then(function (res) {
+      var box = $("tools"); box.textContent = "";
+      Object.keys(res.data.tools).forEach(function (name) {
+        var info = res.data.tools[name];
+        var s = document.createElement("span");
+        var label = name === "js-runtime" ? (info.name || "deno") : name;
+        s.textContent = info.found ? label : label + " missing";
+        if (!info.found) { s.className = "bad"; }
+        s.title = info.found ? (info.source + " - " + (info.version || info.path)) : "";
+        box.appendChild(s);
+      });
+      res.data.problems.forEach(function (text) { log(text, true); });
+      if (!res.data.problems.length) { log("All tools found."); }
+      if (res.data.stale && res.data.stale.length) {       // the server is still running files that have since changed
+        log("The server window is running an older version (" + res.data.stale.join(", ") + " changed). " +
+            "Close the black window and run start.bat again, or new features will be missing or silent.", true);
+        setStatus("Restart needed - see log");
+      }
+    }).catch(offline);
+  }
+
+  /* ---- cache ------------------------------------------------------- */
+  function loadCache() {
+    api("/api/cache").then(function (res) {
+      var box = $("cache"); box.textContent = "";
+      if (!res.data.items.length) {
+        var none = document.createElement("div"); none.className = "none small";
+        none.textContent = "Empty"; box.appendChild(none); return;
+      }
+      res.data.items.forEach(function (meta) {
+        var b = document.createElement("button"); b.type = "button";
+        var t = document.createElement("span"); t.textContent = meta.title;
+        var d = document.createElement("span"); d.textContent = fmt(meta.duration).slice(0, 5);
+        b.appendChild(t); b.appendChild(d);
+        b.addEventListener("click", function () { openSource(meta, true); });
+        box.appendChild(b);
+      });
+    }).catch(function () {});
+  }
+
+  /* ---- preview ----------------------------------------------------- */
+  function openSource(meta, fromCache) {
+    vid.src = "/media/" + meta.id + "/source.mp4";
+    vid.load();
+    $("empty").style.display = "none";
+    $("title").textContent = meta.title;
+    $("play").disabled = false;
+    setStatus(fromCache ? "Opened from cache" : "Done", (meta.bytes / 1048576).toFixed(1) + " MB");
+    log((fromCache ? "Opened from cache: " : "Ready: ") + meta.title);
+
+    cur = { meta: meta, a: null, ov: {}, sel: -1, filter: "ALL", view: "source" };
+    clips = {}; clipWait = {};
+    stopEngine(); eng.edl = null; eng.revCache = {};
+    $("engine").hidden = true;
+    $("bank").hidden = true;
+    trimIn = 0; trimOut = meta.duration; paintTrim();
+    ["setIn", "setOut", "clearTrim", "analyze"].forEach(function (id) { $(id).disabled = false; });
+    loadAnalysis();
+  }
+  function togglePlay() {
+    if (!vid.currentSrc) { return; }
+    stopEngine();
+    clearTimeout(stopTimer);
+    if (asrc) { try { asrc.stop(); } catch (e) {} asrc = null; }
+    vid.muted = false;
+    if (vid.paused) { vid.play(); } else { vid.pause(); }
+  }
+  function paintTransport() {
+    $("play").textContent = vid.paused ? "Play" : "Stop";
+    $("play").className = "big" + (vid.paused ? "" : " on");
+  }
+  function paintTime() {
+    $("time").textContent = fmt(vid.currentTime) + " / " + fmt(vid.duration).slice(0, 5);
+    $("head").style.width = (vid.duration ? vid.currentTime / vid.duration * 100 : 0) + "%";
+  }
+  $("play").addEventListener("click", togglePlay);
+  vid.addEventListener("play", paintTransport);
+  vid.addEventListener("pause", paintTransport);
+  vid.addEventListener("timeupdate", paintTime);
+  vid.addEventListener("loadedmetadata", paintTime);
+  vid.addEventListener("error", function () {
+    if (vid.currentSrc) { log("The browser could not play this file.", true); }
+  });
+  $("scrub").addEventListener("click", function (ev) {
+    if (!vid.duration) { return; }
+    var box = this.getBoundingClientRect();
+    vid.currentTime = (ev.clientX - box.left) / box.width * vid.duration;
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (document.activeElement === $("url")) { return; }
+    if (document.activeElement && document.activeElement.tagName === "INPUT" && document.activeElement.type === "number") { return; }
+    if (ev.code === "Space") { ev.preventDefault(); if (eng.edl) { toggleEngine(); } else { togglePlay(); } return; }
+    if (ev.ctrlKey || ev.altKey || ev.metaKey) { return; }
+    if (eng.edl && eng.focus === "bars" && eng.sel >= 0) {
+      if (ev.code === "KeyR") { regenBar(); return; }
+      if (ev.code === "KeyL") { lockBar(); return; }
+    }
+    if (!cur || !cur.a || cur.sel < 0) { return; }
+    if (ev.code === "KeyL") { toggleLock(); }
+    else if (ev.code === "Delete") { toggleDelete(); }
+    else if (ev.code === "ArrowRight" || ev.code === "ArrowLeft") {
+      ev.preventDefault();
+      var at = cur.list.indexOf(cur.sel), to = cur.list[at + (ev.code === "ArrowRight" ? 1 : -1)];
+      if (at >= 0 && to !== undefined) { showSlice(to); audition(to); }
+    }
+  });
+
+  /* ---- source: fetch + poll ---------------------------------------- */
+  var STAGES = { queued: "Queued", probe: "Asking YouTube", download: "Downloading", merge: "Joining", done: "Done" };
+  function poll(id) {
+    api("/api/job/" + id).then(function (res) {
+      var job = res.data;
+      for (; logCount < job.log.length; logCount++) {
+        var line = job.log[logCount];
+        log(line.msg, line.msg.indexOf("ERROR") === 0, line.t);
+      }
+      if (job.state === "running") {
+        var rate = job.speed ? job.speed + "  ETA " + job.eta : "";
+        setStatus((STAGES[job.stage] || job.stage) + " " + Math.floor(job.progress) + "%", rate, job.progress);
+        polling = setTimeout(function () { poll(id); }, 400);
+        return;
+      }
+      $("go").disabled = false;
+      if (job.state === "done") { openSource(job.meta, false); loadCache(); }
+      else { setStatus("Failed - see log"); }
+    }).catch(function () { $("go").disabled = false; offline(); });
+  }
+  $("form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var url = $("url").value.trim();
+    if (!url) { return; }
+    clearTimeout(polling);
+    $("go").disabled = true;
+    api("/api/ingest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: url }) })
+      .then(function (res) {
+        if (!res.data.ok) { $("go").disabled = false; log(res.data.error, true); setStatus("Rejected - see log"); return; }
+        if (res.data.cached) { $("go").disabled = false; openSource(res.data.meta, true); return; }
+        logCount = 0;
+        setStatus("Queued");
+        poll(res.data.id);
+      }).catch(function () { $("go").disabled = false; offline(); });
+  });
+
+  /* ================= milestone 2: trim, analysis, slice bank ========= */
+
+  /* ---- trim --------------------------------------------------------- */
+  function paintTrim() {
+    $("setIn").textContent = "In " + fmt(trimIn);
+    $("setOut").textContent = "Out " + fmt(trimOut);
+  }
+  $("setIn").addEventListener("click", function () {
+    if (vid.currentTime > trimOut - 1) { log("IN must be at least one second before OUT.", true); return; }
+    trimIn = vid.currentTime; paintTrim();
+  });
+  $("setOut").addEventListener("click", function () {
+    if (vid.currentTime < trimIn + 1) { log("OUT must be at least one second after IN.", true); return; }
+    trimOut = vid.currentTime; paintTrim();
+  });
+  $("clearTrim").addEventListener("click", function () {
+    if (!cur) { return; }
+    trimIn = 0; trimOut = cur.meta.duration; paintTrim();
+  });
+
+  /* ---- analysis ----------------------------------------------------- */
+  function loadAnalysis() {
+    var id = cur.meta.id;
+    api("/api/analysis/" + id).then(function (res) {
+      if (!cur || cur.meta.id !== id) { return; }
+      if (!res.ok) { log("Not analyzed yet. Set IN/OUT if you want a section, then press Analyze."); return; }
+      cur.a = res.data.analysis;
+      cur.ov = res.data.overrides || {};
+      trimIn = cur.a.trim_in; trimOut = cur.a.trim_out; paintTrim();
+      clips = {}; clipWait = {}; eng.revCache = {};
+      buildBank();
+      stopEngine(); $("engine").hidden = false; generate(false);
+    }).catch(offline);
+  }
+  function pollAnalysis(id, seen) {
+    api("/api/analyze/job/" + id).then(function (res) {
+      var job = res.data;
+      for (; seen < job.log.length; seen++) {
+        log(job.log[seen].msg, job.log[seen].msg.indexOf("ERROR") === 0, job.log[seen].t);
+      }
+      if (job.state === "running") {
+        setStatus("Analyzing " + Math.floor(job.progress) + "%", "", job.progress);
+        setTimeout(function () { pollAnalysis(id, seen); }, 500);
+        return;
+      }
+      $("analyze").disabled = false;
+      if (job.state === "done") { setStatus("Analysis done"); if (cur && cur.meta.id === id) { loadAnalysis(); } }
+      else { setStatus("Analysis failed - see log"); }
+    }).catch(function () { $("analyze").disabled = false; offline(); });
+  }
+  $("analyze").addEventListener("click", function () {
+    if (!cur) { return; }
+    var id = cur.meta.id;
+    $("analyze").disabled = true;
+    api("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ id: id, trim_in: trimIn, trim_out: trimOut }) })
+      .then(function (res) {
+        if (!res.data.ok) { $("analyze").disabled = false; log(res.data.error, true); return; }
+        if (res.data.cached) {     // nothing to redo, and nothing to reload
+          $("analyze").disabled = false;
+          log("Already analyzed with these IN/OUT points. Move IN or OUT to analyze a different section.");
+          if (!cur.a) { loadAnalysis(); }
+          return;
+        }
+        setStatus("Analyzing 0%");
+        pollAnalysis(id, 0);
+      }).catch(function () { $("analyze").disabled = false; offline(); });
+  });
+
+  /* ---- slice audio ---------------------------------------------------
+     Each slice is fetched from the server as its own tiny WAV the first time
+     it is needed, then kept. The page never holds the whole song in memory. */
+  function loadClip(i) {
+    if (clips[i]) { return Promise.resolve(clips[i]); }
+    if (clipWait[i]) { return clipWait[i]; }
+    if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+    var id = cur.meta.id, made = cur.a.made;
+    clipWait[i] = fetch("/media/" + id + "/slice/" + i + ".wav?v=" + encodeURIComponent(made))
+      .then(function (r) { if (!r.ok) { throw new Error(); } return r.arrayBuffer(); })
+      .then(function (bytes) { return actx.decodeAudioData(bytes); })
+      .then(function (buf) {
+        if (cur && cur.meta.id === id && cur.a && cur.a.made === made) { clips[i] = buf; delete clipWait[i]; }
+        return buf;
+      }, function (err) { delete clipWait[i]; throw err; });
+    return clipWait[i];
+  }
+
+  /* ---- slice helpers ------------------------------------------------- */
+  function ovOf(i) { return cur.ov[i] || (cur.ov[i] = { tag: "", locked: false, deleted: false }); }
+  function peek(i) { return cur.ov[i] || { tag: "", locked: false, deleted: false }; }
+  function tagOf(i) { return peek(i).tag || cur.a.slices[i].tag; }
+  function visible(i) {
+    if (cur.filter === "ALL") { return true; }
+    if (cur.filter === "LOCKED") { return peek(i).locked; }
+    return tagOf(i) === cur.filter && !peek(i).deleted;
+  }
+  function padEl(i) { return cur.els ? cur.els[i] : null; }
+  function num4(i) { var t = String(i); while (t.length < 4) { t = "0" + t; } return t; }
+  function saveSoon() {
+    clearTimeout(saveTimer);
+    var id = cur.meta.id, body = JSON.stringify({ overrides: cur.ov });
+    saveTimer = setTimeout(function () {
+      fetch("/api/slices/" + id, { method: "POST", headers: { "Content-Type": "application/json" }, body: body })
+        .catch(function () { log("Could not save slice changes.", true); });
+    }, 400);
+  }
+
+  /* ---- build the bank ------------------------------------------------ */
+  function drawWave(canvas, env, colour) {
+    var g = canvas.getContext("2d"), w = canvas.width / env.length, mid = canvas.height / 2;
+    g.fillStyle = colour;
+    for (var k = 0; k < env.length; k++) {
+      var h = Math.max(1, env[k] / 255 * canvas.height);
+      g.fillRect(Math.round(k * w), Math.round(mid - h / 2), Math.ceil(w) - 1, Math.round(h));
+    }
+  }
+  function paintPad(i) {
+    var el = padEl(i), o = peek(i);
+    if (!el) { return; }                                   // not on the page being shown
+    el.className = "pad" + (o.locked ? " locked" : "") + (o.deleted ? " del" : "") + (i === cur.sel ? " sel" : "");
+    el.lastChild.lastChild.textContent = tagOf(i);
+  }
+  /* Only one page of pads exists at a time, so the browser never has to
+     lay out or paint more than PAGE of them, however long the video is. */
+  function renderPads() {
+    var a = cur.a, th = a.thumbs, pads = $("pads"), colour = getComputedStyle(document.body).color;
+    cur.list = [];
+    for (var i = 0; i < a.slices.length; i++) { if (visible(i)) { cur.list.push(i); } }
+    cur.pages = Math.max(1, Math.ceil(cur.list.length / PAGE));
+    cur.page = Math.max(0, Math.min(cur.pages - 1, cur.page || 0));
+    cur.els = {};
+    pads.textContent = "";
+    var frag = document.createDocumentFragment();
+    cur.list.slice(cur.page * PAGE, (cur.page + 1) * PAGE).forEach(function (i) {
+      var s = a.slices[i];
+      var pad = document.createElement("button"); pad.type = "button"; pad.dataset.i = i;
+      var pic = document.createElement("span"); pic.className = "th";
+      if (th) {
+        var n = Math.max(0, Math.min(th.count - 1, Math.floor((s.start - a.trim_in) * th.fps)));
+        pic.style.backgroundSize = (th.cols * th.w) + "px " + (th.rows * th.h) + "px";
+        pic.style.backgroundPosition = (-(n % th.cols) * th.w) + "px " + (-Math.floor(n / th.cols) * th.h) + "px";
+      }
+      var cv = document.createElement("canvas"); cv.width = 96; cv.height = 22;
+      drawWave(cv, s.env, colour);
+      var lab = document.createElement("span"); lab.className = "lab";
+      var a1 = document.createElement("span"); a1.textContent = num4(i);
+      var a2 = document.createElement("span");
+      lab.appendChild(a1); lab.appendChild(a2);
+      pad.appendChild(pic); pad.appendChild(cv); pad.appendChild(lab);
+      frag.appendChild(pad);
+      cur.els[i] = pad;
+    });
+    pads.appendChild(frag);
+    Object.keys(cur.els).forEach(function (i) { paintPad(+i); });
+    var first = cur.list.length ? cur.page * PAGE + 1 : 0, last = Math.min(cur.list.length, (cur.page + 1) * PAGE);
+    $("pageInfo").textContent = "Page " + (cur.page + 1) + " / " + cur.pages + "  /  showing " + first + " to " + last + " of " + cur.list.length;
+    $("pagePrev").disabled = cur.page <= 0;
+    $("pageNext").disabled = cur.page >= cur.pages - 1;
+  }
+  function showSlice(i) {                                   // turn to the page that holds slice i
+    var at = cur.list.indexOf(i);
+    if (at >= 0 && Math.floor(at / PAGE) !== cur.page) { cur.page = Math.floor(at / PAGE); renderPads(); }
+  }
+  $("pagePrev").addEventListener("click", function () { if (cur && cur.a) { cur.page--; renderPads(); } });
+  $("pageNext").addEventListener("click", function () { if (cur && cur.a) { cur.page++; renderPads(); } });
+  function paintFilters() {
+    var counts = { ALL: cur.a.slices.length, LOCKED: 0 };
+    TAGS.forEach(function (t) { counts[t] = 0; });
+    cur.a.slices.forEach(function (s) {
+      var o = peek(s.i);
+      if (o.locked) { counts.LOCKED++; }
+      if (!o.deleted) { counts[tagOf(s.i)] = (counts[tagOf(s.i)] || 0) + 1; }
+    });
+    var box = $("filters"); box.textContent = "";
+    ["ALL"].concat(TAGS, ["LOCKED"]).forEach(function (name) {
+      var b = document.createElement("button"); b.type = "button";
+      b.textContent = name + " " + counts[name];
+      if (cur.filter === name) { b.className = "on"; }
+      b.addEventListener("click", function () {
+        cur.filter = name; cur.page = 0; paintFilters(); renderPads();
+      });
+      box.appendChild(b);
+    });
+  }
+  function paintDetail() {
+    var i = cur.sel, has = i >= 0;
+    $("lockBtn").disabled = !has; $("delBtn").disabled = !has;
+    var box = $("tagBtns"); box.textContent = "";
+    if (!has) { $("selInfo").textContent = "Click a pad to hear and see it"; return; }
+    var s = cur.a.slices[i], o = peek(i);
+    $("selInfo").textContent = "#" + num4(i) + "  /  " + fmt(s.start) + "  /  " + Math.round((s.end - s.start) * 1000) +
+      " ms  /  note " + s.note + "  /  " + Math.round(s.centroid) + " Hz  /  level " + Math.round(s.rms * 100);
+    TAGS.forEach(function (t) {
+      var b = document.createElement("button"); b.type = "button"; b.textContent = t;
+      if (tagOf(i) === t) { b.className = "on"; }
+      b.addEventListener("click", function () {
+        ovOf(i).tag = t === s.tag ? "" : t;
+        paintPad(i); paintFilters(); paintDetail(); saveSoon();
+      });
+      box.appendChild(b);
+    });
+    $("lockBtn").className = o.locked ? "on" : "";
+    $("lockBtn").textContent = o.locked ? "Locked" : "Lock";
+    $("delBtn").className = o.deleted ? "on" : "";
+    $("delBtn").textContent = o.deleted ? "Restore" : "Delete";
+  }
+  function select(i) {
+    var old = cur.sel; cur.sel = i;
+    if (old >= 0) { paintPad(old); }
+    paintPad(i); paintDetail();
+  }
+  function toggleLock() {
+    var i = cur.sel; if (i < 0) { return; }
+    var o = ovOf(i); o.locked = !o.locked; if (o.locked) { o.deleted = false; }
+    paintPad(i); paintFilters(); paintDetail(); saveSoon();
+  }
+  function toggleDelete() {
+    var i = cur.sel; if (i < 0) { return; }
+    var o = ovOf(i);
+    if (o.locked) { log("Slice #" + num4(i) + " is locked. Unlock it before deleting."); return; }
+    o.deleted = !o.deleted;
+    paintPad(i); paintFilters(); paintDetail(); saveSoon();
+  }
+  $("lockBtn").addEventListener("click", toggleLock);
+  $("delBtn").addEventListener("click", toggleDelete);
+
+  function buildBank() {
+    var a = cur.a, id = cur.meta.id;
+    cur.sel = -1; cur.filter = "ALL"; cur.page = 0;
+    $("bankInfo").textContent = a.slices.length + " slices  /  " + a.bpm.toFixed(1) + " BPM  /  " +
+      a.scene_cuts.length + " scene cuts  /  " + fmt(a.trim_in) + " to " + fmt(a.trim_out);
+    $("pads").style.setProperty("--sprite", a.thumbs ? "url(/media/" + id + "/thumbs.jpg?v=" + encodeURIComponent(a.made) + ")" : "none");
+    renderPads(); paintFilters(); paintDetail();
+    $("bank").hidden = false;
+  }
+  $("pads").addEventListener("click", function (ev) {
+    var pad = ev.target.closest(".pad");
+    if (pad) { eng.focus = "bank"; audition(+pad.dataset.i); }
+  });
+
+  /* ---- audition: hear the slice and see the same moment -------------- */
+  function audition(i) {
+    var s = cur.a.slices[i], dur = s.end - s.start;
+    stopEngine();
+    select(i);
+    if (asrc) { try { asrc.stop(); } catch (e) {} asrc = null; }
+    loadClip(i).then(function (buf) {
+      if (!cur || cur.sel !== i || eng.playing) { return; }      // moved on while it loaded
+      if (actx.state === "suspended") { actx.resume(); }
+      if (asrc) { try { asrc.stop(); } catch (e) {} }
+      asrc = actx.createBufferSource();
+      asrc.buffer = buf;
+      asrc.connect(actx.destination);
+      asrc.start();
+    }).catch(function () { log("Could not load the audio for slice #" + num4(i) + ".", true); });
+    clearTimeout(stopTimer);
+    showSourceVideo();
+    vid.pause(); vid.muted = true; vid.currentTime = s.start;
+    var playing = vid.play();
+    if (playing && playing.catch) { playing.catch(function () {}); }
+    stopTimer = setTimeout(function () { vid.pause(); }, Math.max(120, dur * 1000));
+  }
+
+  /* ================= milestone 3: break engine ====================== */
+  /* The arrangement is an EDIT DECISION LIST (eng.edl): plain data, every
+     event fully spelled out (which slice, when, how long, pitch, reverse).
+     The live preview below plays it; the offline render (milestone 7) will
+     read the same list, so what you hear is what gets exported.
+     All times inside the list are in BEATS, so changing BPM needs no regenerate. */
+
+  var OPS = [
+    { id: "ratchet",  name: "Ratchet",      def: 35 },
+    { id: "swap",     name: "Shuffle-swap", def: 40 },
+    { id: "displace", name: "Displace",     def: 15 },
+    { id: "reverse",  name: "Reverse",      def: 15 },
+    { id: "tail",     name: "Pitch-tail",   def: 20 },
+    { id: "stretch",  name: "Stretch",      def: 8 },
+    { id: "stutter",  name: "Gate-stutter", def: 15 },
+    { id: "meter",    name: "Meter break",  def: 0 }
+  ];
+  var METERS = [{ n: "7/8", steps: 14 }, { n: "5/4", steps: 20 }, { n: "7/4", steps: 28 }, { n: "11/8", steps: 22 }];
+  var LANES = { KICK: 0, SNARE: 1, TONAL: 1, HAT: 2 };
+  /* Song form: the bars are split into six sections, in these proportions. Each has its own density. */
+  var FORM = [
+    { name: "INTRO",     tag: "IN",  share: 2, level: 0.2 },    // tonal slices, stretched, sparse
+    { name: "BUILD",     tag: "BLD", share: 2, level: 0.45 },   // break creeps in
+    { name: "DROP A",    tag: "A",   share: 4, level: 1.0 },    // full break
+    { name: "INTERLUDE", tag: "INT", share: 2, level: 0.15 },   // sudden near-silence
+    { name: "DROP B",    tag: "B",   share: 4, level: 1.35 },   // heavier, odd meters, more ratchets
+    { name: "OUTRO",     tag: "OUT", share: 2, level: 0.8 }     // collapse into a smear
+  ];
+  function sectionOf(n, total) {
+    if (!eng.form) { return { sec: FORM[2], pos: 0, last: false }; }
+    var edge = 0;
+    for (var k = 0; k < FORM.length; k++) {
+      var start = Math.round(edge / 16 * total); edge += FORM[k].share;
+      var end = Math.round(edge / 16 * total);
+      if (n < end || k === FORM.length - 1) { return { sec: FORM[k], pos: (n - start) / Math.max(1, end - start), last: n === end - 1 }; }
+    }
+  }
+  var eng = { bpm: 174, seed: 1, nbars: 16, intensity: 60, ops: {}, edl: null, sel: -1, focus: "bank",
+              playing: false, timer: null, next: 0, nextTime: 0, live: [], marks: [], shown: -1,
+              revCache: {}, master: null, hann: null, form: true, voices: { sub: true }, mute: { SYNTH: true, DRUMS: true }, bus: null, kit: {}, kitWait: {}, kitCount: null, inp: {}, post: {}, fx: {}, crushReady: false, curves: {}, ir: null, snd: {}, open: null,
+              mix: { samples: 100, instruments: 100, master: 100, SUB: 100, REESE: 100, BOX: 100, ACID: 100, SYNTH: 100, DRUMS: 100 } };
+  /* MIXER. Three group levels and one level per instrument, each 0..150 where 100 leaves the sound as generated.
+     Samples = the chopped video audio itself (kick, snare, hat, tonal slices). Instruments = Sub bass, Reese,
+     Music box, Acid (made from the source) and the optional Synth layer. Master = everything, before the limiter.
+     Saved in the edit list as "mix"; render.py applies the same numbers with the same curve (level()). */
+  var MIXER = [["samples", "Samples", "Volume of the chopped video audio: the kick, snare, hat and tonal slices"],
+               ["instruments", "Instruments", "Volume of all instruments together: sub bass, reese, music box, acid, synth and added drums"],
+               ["master", "Master", "Volume of the complete mix. It sits before the limiter, so turning it up cannot clip"],
+               ["SUB", "Sub bass", ""], ["REESE", "Reese", ""], ["BOX", "Music box", ""], ["ACID", "Acid", ""],
+               ["SYNTH", "Synth", "Volume of the optional oscillator layer"],
+               ["DRUMS", "Added drums", "Volume of the optional added drum kit"]];
+  var MASTER_TRIM = 0.8;                                                                   // must match render.py
+  function level(p) {                                                                      // must match render.py
+    p = Math.max(0, Math.min(150, p === undefined || p === null || isNaN(+p) ? 100 : +p));
+    return p * p / 10000;                         // squared: 50 is a quarter (-12 dB), 150 is 2.25 times (+7 dB)
+  }
+  var INSTRUMENTS = [["KICK", "Kick"], ["SNARE", "Snare"], ["HAT", "Hat"], ["TONAL", "Tonal"], ["SUB", "Sub bass"],
+                     ["REESE", "Reese"], ["BOX", "Music box"], ["ACID", "Acid"], ["SYNTH", "Synth"], ["DRUMS", "Added drums"]];
+  /* Bass, Reese, Music box and Acid are made FROM THE SOURCE: a chosen slice, re-pitched, stands in for the oscillator
+     and goes through the same filters and envelopes. The plain oscillators are an optional extra (the Synth switch, off
+     by default). SRC_BASE: the note, in semitones above the root, at which a voice's slice plays at its tuned rate. */
+  var SRC_BASE = { SUB: 0, REESE: 12, ACID: 24, BOX: 36 };
+  var SUB_SRC_CUTOFF = 200;                                                                // must match render.py
+  /* ACID: saw into two lowpass filters in a row (24 dB/octave), cutoff snapping from PEAK down to BASE.  must match render.py */
+  var ACID_BASE = 280, ACID_PEAK = 2200, ACID_ACCENT = 2, ACID_DECAY = 0.16, ACID_Q = 8,
+      ACID_GLIDE = 0.04, ACID_ATTACK = 0.003, ACID_RELEASE = 0.012;
+  var ACID_SCALE = [0, 0, 0, 3, 7, 10, 12, 12, -2];                                        // mostly root and octave
+  var BOX_ATTACK = 0.002, BOX_THIRD_MIX = 0.25, BOX_FLOOR = 0.01;                          // must match render.py
+  var REESE_CENTS = 14, REESE_CUTOFF = 500, REESE_ATTACK = 0.01, REESE_RELEASE = 0.04;     // must match render.py
+  var BOX_SCALE = [0, 3, 5, 7, 10, 12, 15];                                                // minor pentatonic over the root
+  var NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  var SUB_GLIDE = 0.06, SUB_ATTACK = 0.005, SUB_RELEASE = 0.03, SUB_OCTAVE_MIX = 0.3;   // must match render.py
+  /* SOUND PANELS. One per source-made instrument: [key, label, lowest, highest, step, default, unit, log slider?].
+     The defaults are the sound as it was before the panels existed. The values are saved in the edit list as "snd"
+     (plus on: false while a panel is bypassed) and read at playback, so changing them never touches the notes.
+     They shape the SOURCE-MADE instrument only; the Synth layer's oscillators keep the default sound.
+     The same table, with the same limits and defaults, is SND in render.py. */
+  var SND = {
+    SUB:   [["oct", "Octave", -2, 1, 1, 0, ""], ["tune", "Tune", -12, 12, 1, 0, "st"], ["cut", "Cutoff", 60, 2000, 1, 200, "Hz", true],
+            ["res", "Resonance", 0, 24, 1, 0, "dB"], ["drive", "Drive", 0, 100, 1, 0, ""], ["len", "Length", 10, 100, 1, 100, "%"]],
+    REESE: [["det", "Detune", 0, 60, 1, 14, "ct"], ["width", "Width", 0, 100, 1, 0, ""], ["cut", "Cutoff", 100, 8000, 1, 500, "Hz", true],
+            ["res", "Resonance", 0, 24, 1, 0, "dB"], ["dist", "Distortion", 0, 100, 1, 0, ""]],
+    BOX:   [["tune", "Tune", -24, 24, 1, 0, "st"], ["att", "Attack", 2, 200, 1, 2, "ms", true], ["dec", "Decay", 10, 100, 1, 100, "%"],
+            ["bright", "Brightness", 300, 16000, 1, 16000, "Hz", true], ["dist", "Distortion", 0, 100, 1, 0, ""]],
+    ACID:  [["cut", "Cutoff", 80, 2000, 1, 360, "Hz", true], ["res", "Resonance", 0, 24, 1, 11, "dB"], ["env", "Envelope", 0, 200, 1, 120, "%"],
+            ["dec", "Decay", 20, 600, 1, 200, "ms", true], ["acc", "Accent", 0, 200, 1, 100, "%"], ["slide", "Slide", 0, 200, 1, 40, "ms"]]
+  };
+  /* Effects every source-made instrument has, shown as the second row of its panel. They sit on the instrument's
+     whole channel, in this order: bits + rate, then delay and reverb side by side. All start switched off. */
+  var SND_FX = [["bits", "Bits", 4, 16, 1, 16, ""], ["srate", "Rate", 500, 44100, 1, 44100, "Hz", true], ["dly", "Delay", 0, 100, 1, 0, ""],
+                ["dtime", "Time", 0.25, 1, 0.25, 0.75, ""], ["dfb", "Feedback", 0, 90, 1, 35, "%"], ["rev", "Reverb", 0, 100, 1, 0, ""]];
+  var TIME_NAMES = { 0.25: "1/16", 0.5: "1/8", 0.75: "3/16", 1: "1/4" };                    // delay time, in beats
+  /* What every source-made instrument can do to each NOTE, shown as the second and third rows of its panel.
+     All start switched off. Retrig changes timing, so it is written into the notes themselves (applyRetrig). */
+  var SND_NOTE = [["pos", "Start", 0, 90, 1, 0, "%"], ["back", "Reverse", 0, 1, 1, 0, ""], ["loop", "Loop", 0, 200, 1, 0, "ms"],
+                  ["bend", "Bend", -24, 24, 1, 0, "st"], ["btime", "Bend time", 5, 500, 1, 60, "ms", true], ["grain", "Stretch", 0, 120, 5, 0, "ms"],
+                  ["rtg", "Retrig", 0, 4, 1, 0, ""], ["rchance", "Chance", 0, 100, 1, 100, "%"]];
+  var SND_EXTRA = { ACID: [["dist", "Distortion", 0, 100, 1, 55, ""], ["body", "Body", 0, 100, 1, 60, ""]] };   // would not fit in Acid's first row
+  /* ACID is big and crushed OUT OF THE BOX (the user found the plain version weak): distortion, a copy an octave
+     below (Body), a hotter filter, and the channel's Bits and Rate already turned down. ACID_FX_DEFAULTS replaces the
+     shared effects-row defaults for Acid only. SND_OSC keeps the Synth layer's oscillator acid exactly as it was. */
+  var ACID_FX_DEFAULTS = { bits: 6, srate: 9000 };
+  var ACID_OUT = 1.9;                    // the source-made acid's level after its distortion, so it sits beside the bass
+  var SND_OSC = { ACID: { cut: 280, res: 8, env: 100, dec: 160 } };                         // all must match render.py
+  var RETRIG_STEPS = [0, 1, 0.5, 0.25, 0.125], RETRIG_NAMES = ["Off", "1/4", "1/8", "1/16", "1/32"];   // in beats
+  var SND_ROWS = {};                                          // controls per row: own sound, note row, rest; then the effects row
+  Object.keys(SND).forEach(function (v) {
+    var extra = SND_EXTRA[v] || [];
+    SND_ROWS[v] = [SND[v].length, 6, SND_NOTE.length - 6 + extra.length];
+    SND[v] = SND[v].concat(SND_NOTE, extra, SND_FX);
+  });
+  SND.ACID = SND.ACID.map(function (c) {
+    if (ACID_FX_DEFAULTS[c[0]] === undefined) { return c; }
+    var own = c.slice(); own[5] = ACID_FX_DEFAULTS[c[0]]; return own;
+  });
+  /* ADDED DRUMS: an optional kit under the source's own drum slices, played from the user's own samples in the
+     drumnbasskit folder (kick, snare, closed hat, open hat). The synthesized kit that was here first was rejected.
+     Its panel: four levels (0..150, same curve as the mixer), then which sample each drum uses and two tunings.
+     Defined after the line above on purpose, so it does not get the effects row. Same table in render.py.
+     The highest sample number is set from what the folder holds (loadKitList). */
+  SND.DRUMS = [["kick", "Kick", 0, 150, 1, 100, ""], ["snare", "Snare", 0, 150, 1, 100, ""], ["clap", "Clap", 0, 150, 1, 100, ""],
+               ["chat", "Closed hat", 0, 150, 1, 100, ""], ["ohat", "Open hat", 0, 150, 1, 100, ""], ["perc", "Percs", 0, 150, 1, 100, ""],
+               ["ksel", "Kick sample", 1, 99, 1, 1, ""], ["ssel", "Snare sample", 1, 99, 1, 1, ""], ["lsel", "Clap sample", 1, 99, 1, 1, ""],
+               ["csel", "Hat sample", 1, 99, 1, 1, ""], ["osel", "Open sample", 1, 99, 1, 1, ""], ["psel", "Perc 1 sample", 1, 99, 1, 1, ""],
+               ["qsel", "Perc 2 sample", 1, 99, 1, 2, ""], ["ktune", "Kick tune", -12, 12, 1, 0, "st"], ["sst", "Snare tune", -12, 12, 1, 0, "st"],
+               ["drv", "Drive", 0, 100, 1, 0, ""], ["cut", "Cut picture", 0, 1, 1, 1, ""]].concat(SND_FX);
+  var DRUM_ROWS = [6, 6, 5];                                  // how the kit's controls are laid out: levels, samples, the rest, then effects
+  /* Drum letters: K kick, S snare, L clap, C closed hat, O open hat, P and Q the two perc parts. */
+  var DRUM_PICK = { K: "ksel", S: "ssel", L: "lsel", C: "csel", O: "osel", P: "psel", Q: "qsel" };
+  var DRUM_LEVEL = { K: "kick", S: "snare", L: "clap", C: "chat", O: "ohat", P: "perc", Q: "perc" };
+  var DRUM_G = { K: 0.7, S: 0.6, L: 0.4, C: 0.25, O: 0.2, P: 0.35, Q: 0.35 };   // each drum's level once its sample's peak is 1
+  var DRUM_CHOKE = 0.01;                                      // an open hat cut off by the next hat fades out over this long. All must match render.py
+  var SND_HELP = {
+    pos: "Where in the slice each note starts. 0 = the beginning", back: "Play the slice backwards",
+    loop: "Repeat only a tiny piece of the slice. Short loops turn into a buzzing tone. Off = use the whole slice",
+    bend: "Each note starts this many semitones away and bends onto its pitch. Notes that already slide keep their slide",
+    btime: "How long the bend takes", grain: "Stretch: crawl through the slice in overlapping grains of this size instead of looping it. Off = normal",
+    rtg: "Chop every longer note into repeats this long, each starting the sound again", rchance: "How many of the notes get the retrigger",
+    body: "Adds a copy one octave below, through the same filter. Makes the sound bigger",
+    kick: "Level of the added kick", snare: "Level of the added snare", chat: "Level of the added closed hat", ohat: "Level of the added open hat",
+    clap: "Level of the claps layered on the main snare hits", perc: "Level of the two perc parts",
+    lsel: "Which clap (snares & claps / clap N.wav)", psel: "Which perc for the first perc part (percs / perc N.wav)",
+    qsel: "Which perc for the second perc part", drv: "Saturation on the whole kit together. Glues and roughens it",
+    cut: "On = added kick and snare hits also cut the video (to the source's own kick and snare pictures). Off = sound only",
+    ksel: "Which kick from the drumnbasskit folder (kicks / kick N.wav)", ssel: "Which snare (snares & claps / snare N.wav)",
+    csel: "Which closed hat (hi hats / hat N.wav)", osel: "Which open hat (hi hats / open hat N.wav)",
+    ktune: "Semitones up or down. Changes the kick's length too", sst: "Semitones up or down. Changes the snare's length too",
+    bits: "Bit depth. Lower is grittier and noisier. 16 = off", srate: "Sample rate. Lower is duller with a metallic ring. At the top it is off",
+    dly: "How loud the echoes are. 0 = off", dtime: "Gap between echoes, as a note length at the current BPM",
+    dfb: "How much each echo feeds the next. More = more echoes",
+    oct: "Octaves up or down from the automatic choice", tune: "Semitones up or down", cut: "Where the lowpass filter closes. Lower is darker",
+    drive: "Saturation after the filter. Adds harmonics so the bass is heard on small speakers", len: "How much of each note sounds. Lower is shorter, punchier notes",
+    det: "How far apart the two copies are tuned. More is a thicker, beating sound", width: "0 = both copies in the middle, 100 = one fully left, one fully right",
+    dist: "Saturation after the filter", att: "How fast each note comes in", dec: "How soon each note dies away, as a share of its length",
+    bright: "Lowpass on the slice. At the top the filter is off", rev: "How much of a shared room sound is added",
+    res: "How much the filter rings at its cutoff", env: "How far the filter opens on each note. 100 = as before, 0 = no movement",
+    acc: "How much louder and brighter the accented notes are. 0 = no accents", slide: "How long a slide between two notes takes. 0 = no slide"
+  };
+  var REVERB_SECONDS = 1.6, REVERB_SEED = 0x2E7E2B;                                        // must match render.py
+  Object.keys(SND).forEach(function (v) {
+    eng.snd[v] = { on: true };
+    SND[v].forEach(function (c) { eng.snd[v][c[0]] = c[5]; });
+  });
+  /* One instrument's sound as plain numbers. Bypassed panel, missing or out-of-range values: the default. */
+  function sound(voice, plain) {
+    var saved = eng.snd[voice], out = {};
+    SND[voice].forEach(function (c) {
+      var osc = plain && SND_OSC[voice] ? SND_OSC[voice][c[0]] : undefined;          // the Synth layer's own fixed values
+      var v = osc !== undefined ? osc : !plain && saved && saved.on !== false ? +saved[c[0]] : c[5];
+      out[c[0]] = isNaN(v) ? c[5] : Math.max(c[2], Math.min(c[3], v));
+    });
+    return out;
+  }
+  OPS.forEach(function (o) { eng.ops[o.id] = o.def; });
+
+  /* ---- seeded random numbers: same seed, same result every time ------ */
+  function rng32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function barSeed(seed, n, regen) {
+    var h = Math.imul(seed | 0, 0x9E3779B1) ^ Math.imul(n + 1, 0x85EBCA6B) ^ Math.imul(regen + 1, 0xC2B2AE35);
+    h ^= h >>> 15; h = Math.imul(h, 0x2C1B3C6D); h ^= h >>> 12;
+    return h >>> 0;
+  }
+  function r5(x) { return Math.round(x * 100000) / 100000; }
+
+  /* ---- break kit: which slices play kick, snare and hat -------------- */
+  function buildKit() {
+    var kit = { KICK: [], SNARE: [], HAT: [], guessed: [] }, all = [];
+    cur.a.slices.forEach(function (s) {
+      var o = peek(s.i);
+      if (o.deleted || s.end - s.start < 0.03) { return; }
+      var item = { i: s.i, rms: s.rms, cent: s.centroid, locked: o.locked };
+      all.push(item);
+      if (kit[tagOf(s.i)] && tagOf(s.i) !== "guessed") { kit[tagOf(s.i)].push(item); }
+    });
+    if (!all.length) { return null; }
+    // A source with no usable drums: stand in the darkest slices as kicks,
+    // the brightest as hats, the loudest of the rest as snares.
+    var byCent = all.slice().sort(function (a, b) { return a.cent - b.cent; });
+    var third = Math.max(1, Math.min(6, Math.floor(all.length / 3)));
+    if (!kit.KICK.length) { kit.KICK = byCent.slice(0, third); kit.guessed.push("kick"); }
+    if (!kit.HAT.length) { kit.HAT = byCent.slice(-third); kit.guessed.push("hat"); }
+    if (!kit.SNARE.length) {
+      var mid = byCent.slice(third, Math.max(third + 1, byCent.length - third));
+      kit.SNARE = (mid.length ? mid : byCent).slice(); kit.guessed.push("snare");
+    }
+    // tonal material for intro / interlude / outro: tonal or vocal slices, longest and loudest first
+    var tonal = all.filter(function (x) { var t = tagOf(x.i); return t === "TONAL" || t === "VOCAL"; });
+    if (!tonal.length) { tonal = all.slice(); }
+    kit.TONAL = tonal.sort(function (a, b) {
+      var la = cur.a.slices[a.i], lb = cur.a.slices[b.i];
+      return (b.locked - a.locked) || ((lb.end - lb.start) * b.rms - (la.end - la.start) * a.rms) || (a.i - b.i);
+    }).slice(0, 8).map(function (x) { return x.i; });
+    // root note for the synth layer: the most common note among the tonal slices, placed in the sub octave
+    var votes = {}, best = 0;
+    kit.TONAL.forEach(function (i) { var pc = NOTE_NAMES.indexOf(cur.a.slices[i].note); if (pc >= 0) { votes[pc] = (votes[pc] || 0) + 1; } });
+    Object.keys(votes).forEach(function (pc) { if (votes[pc] > (votes[best] || 0)) { best = +pc; } });
+    kit.root = best >= 4 ? 24 + best : 36 + best;          // MIDI note between E1 (41 Hz) and D#2 (78 Hz)
+    ["KICK", "SNARE", "HAT"].forEach(function (role) {
+      kit[role] = kit[role].slice().sort(function (a, b) {
+        return (b.locked - a.locked) || (b.rms - a.rms) || (a.i - b.i);     // locked first, then loudest
+      }).slice(0, 8).map(function (x) { return x.i; });
+    });
+    /* Source slices for the pitched voices, chosen automatically: among the loudest, longest, least percussive
+       tonal slices (locked ones first), the darkest becomes the bass and reese, the brightest the music box, and the
+       best of the rest the acid line. Each is tuned so its own note lands on the root, and levelled against the drums. */
+    function score(x) { var s = cur.a.slices[x.i]; return x.rms * Math.min(1, s.end - s.start) * (1 - (s.perc || 0)); }
+    var pool = all.filter(function (x) {
+      var t = tagOf(x.i), s = cur.a.slices[x.i];
+      return (t === "TONAL" || t === "VOCAL") && s.end - s.start >= 0.15 && x.rms > 0;
+    });
+    if (!pool.length) { pool = all.filter(function (x) { return x.rms > 0; }); }
+    pool = pool.sort(function (a, b) { return (b.locked - a.locked) || (score(b) - score(a)) || (a.i - b.i); }).slice(0, 12);
+    if (pool.length) {
+      var dark = pool.slice().sort(function (a, b) { return (a.cent - b.cent) || (a.i - b.i); });
+      var bass = dark[0], bell = dark[dark.length - 1];
+      var lead = pool.filter(function (x) { return x !== bass && x !== bell; })[0] || pool[0];
+      var drums = kit.KICK.concat(kit.SNARE), drumRms = 0;
+      drums.forEach(function (i) { drumRms += cur.a.slices[i].rms / drums.length; });
+      var tuned = function (x, octave, level) {
+        var pc = NOTE_NAMES.indexOf(cur.a.slices[x.i].note), shift = pc < 0 ? 0 : (best - pc + 18) % 12 - 6;
+        return { s: x.i, semis: shift + 12 * octave, g: r5(level * Math.max(0.25, Math.min(8, (drumRms || x.rms) / x.rms))) };
+      };
+      kit.src = { SUB: tuned(bass, -1, 1.2), REESE: tuned(bass, 0, 0.8), ACID: tuned(lead, 0, 0.3), BOX: tuned(bell, 1, 0.9) };
+    }
+    return kit;
+  }
+
+  /* ---- one bar: jungle backbone, then mutation operators ------------- */
+  function genBar(n, regen, kit) {
+    var r = rng32(barSeed(eng.seed, n, regen)), where = sectionOf(n, eng.nbars), sec = where.sec;
+    var I = Math.min(1, eng.intensity / 100 * sec.level);
+    function chance(op, scale) {
+      var p = eng.ops[op] + (sec.name === "DROP B" && (op === "meter" || op === "ratchet") ? 20 : 0);
+      return r() < p / 100 * (0.3 + 0.7 * I) * (scale || 1);
+    }
+    function tone() { return kit.TONAL[Math.floor(r() * kit.TONAL.length)]; }
+    function finish(steps, meter, events) {
+      events.forEach(function (e) { e.t = r5(e.t / 4); e.d = r5(e.d / 4); e.g = r5(e.g); e.rate = r5(e.rate); });   // steps -> beats
+      events.sort(function (a, b) { return a.t - b.t || LANES[a.role] - LANES[b.role]; });
+      return { n: n, meter: meter, beats: steps / 4, locked: false, regen: regen, sec: sec.tag, events: events };
+    }
+    function smear(t, d, g) {
+      return { t: t, d: d, s: tone(), role: "TONAL", g: g, rate: 1, op: "STRETCH", grain: 40 + Math.floor(r() * 41), seed: Math.floor(r() * 4294967296) };
+    }
+    var quiet;
+    if (sec.name === "INTRO") {            // two long smears per bar, getting louder
+      quiet = finish(16, "4/4", [smear(0, 8, 0.45 + 0.25 * where.pos), smear(8, 8, 0.5 + 0.25 * where.pos)]);
+      quiet.synth = layer(boxLine(quiet, 0.3));
+      return quiet;
+    }
+    if (sec.name === "INTERLUDE") {        // one quiet smear, a gap, then a single detuned note
+      quiet = finish(16, "4/4", [smear(0, 6, 0.35),
+        { t: 10 + 2 * Math.floor(r() * 3), d: 2, s: tone(), role: "TONAL", g: 0.5, rate: [0.5, 0.75, 1, 1.5][Math.floor(r() * 4)], op: "HIT" }]);
+      quiet.synth = layer(boxLine(quiet, 0.6));
+      return quiet;
+    }
+    if (sec.name === "OUTRO" && where.last) {   // final bar: one long smear that dies away
+      return finish(16, "4/4", [smear(0, 16, 0.7)]);
+    }
+    function pick(role, swapped) {
+      var list = kit[role];
+      if (!swapped || list.length < 2) { return list[0]; }
+      return list[1 + Math.floor(r() * (list.length - 1))];
+    }
+    var steps = 16, meter = "4/4";                       // a step is a 16th note
+    if (chance("meter")) { var m = METERS[Math.floor(r() * METERS.length)]; steps = m.steps; meter = m.n; }
+
+    // 2-bar backbone: kick on 1 and the "and" of 2, snare on 2 and 4; bar two adds a kick and ghost snares
+    var alt = n % 2, units = [], base, events = [];
+    var K = alt ? [0, 6, 10] : [0, 6], S = [4, 12], G = alt ? [7, 15] : [];
+    for (base = 0; base < steps; base += 16) {
+      K.forEach(function (p) { if (base + p < steps) { units.push({ st: base + p, role: "KICK", g: 1 }); } });
+      S.forEach(function (p) { if (base + p < steps) { units.push({ st: base + p, role: "SNARE", g: 1 }); } });
+      G.forEach(function (p) { if (base + p < steps) { units.push({ st: base + p, role: "SNARE", g: 0.45 }); } });
+    }
+    units.sort(function (a, b) { return a.st - b.st; });
+
+    var tailOn = chance("tail"), tailStart = steps - 2, bodyEnd = tailOn ? tailStart : steps;
+    if (tailOn) { units = units.filter(function (u) { return u.st < tailStart; }); }
+
+    // decide what happens to each hit
+    units.forEach(function (u, k) {
+      var last = k === units.length - 1;
+      u.s = pick(u.role, chance("swap"));
+      if (k > 0 && chance("displace")) { u.st = Math.max(0, u.st + [0.5, -0.5, 1 / 3, -1 / 3][Math.floor(r() * 4)]); }
+      if (chance("ratchet", u.role === "SNARE" && u.g === 1 ? 1 : 0.25)) { u.kind = "ratchet"; }
+      else if (chance("stutter", 0.6)) { u.kind = "stutter"; }
+      else if (chance("stretch")) { u.kind = "stretch"; }
+      else { u.kind = "hit"; }
+      u.rev = u.kind === "hit" && chance("reverse", last ? 1.5 : 0.3);
+    });
+    units.sort(function (a, b) { return a.st - b.st; });
+
+    // turn each hit into explicit events; each one lasts until the next hit (choked, like a chopped break)
+    units.forEach(function (u, k) {
+      var gap = Math.max(0.25, (k + 1 < units.length ? units[k + 1].st : bodyEnd) - u.st), pos, frac, len, j;
+      if (u.kind === "ratchet") {
+        var semis = (r() < 0.5 ? 12 : -12) * (0.5 + 0.5 * I), accel = r() < 0.5;
+        for (pos = 0; pos < gap - 0.01; pos += len) {
+          frac = pos / gap;
+          len = accel ? Math.max(0.25, Math.pow(0.25, frac)) : (frac < 1 / 3 ? 1 : frac < 2 / 3 ? 0.5 : 0.25);
+          len = Math.min(len, gap - pos);
+          events.push({ t: u.st + pos, d: len, s: u.s, role: u.role, g: u.g * (0.7 + 0.3 * frac),
+                        rate: Math.pow(2, semis * frac / 12), op: "RATCHET" });
+        }
+      } else if (u.kind === "stutter") {
+        var reps = 3 + Math.floor(r() * 5);
+        for (j = 0; j < reps && j * 0.5 < gap - 0.01; j++) {
+          events.push({ t: u.st + j * 0.5, d: Math.min(0.5, gap - j * 0.5), s: u.s, role: u.role, g: u.g * (1 - 0.8 * j / reps), rate: 1, op: "STUTTER" });
+        }
+      } else if (u.kind === "stretch") {
+        events.push({ t: u.st, d: gap, s: u.s, role: u.role, g: u.g * 0.9, rate: 1, op: "STRETCH",
+                      grain: 20 + Math.floor(r() * 61), seed: Math.floor(r() * 4294967296) });
+      } else {
+        events.push({ t: u.st, d: gap, s: u.s, role: u.role, g: u.g, rate: 1, rev: u.rev || undefined, op: u.rev ? "REVERSE" : "HIT" });
+      }
+    });
+    if (tailOn) {   // last 1/8 note: tape-stop down or pitch rise, two octaves
+      events.push({ t: tailStart, d: 2, s: units.length ? units[units.length - 1].s : kit.SNARE[0], role: "SNARE",
+                    g: 1, rate: 1, rate2: r() < 0.6 ? 0.25 : 4, op: "TAIL" });
+    }
+    // hats: 8ths always, extra 16ths as intensity rises, a few dropouts
+    for (var st = 0; st < bodyEnd; st++) {
+      var on = st % 2 === 0 || r() < I * 0.45;
+      if (!on || r() < 0.08 * I) { continue; }
+      events.push({ t: st, d: 1, s: pick("HAT", chance("swap")), role: "HAT", g: st % 4 === 2 ? 0.5 : 0.32, rate: 1, op: "HIT" });
+    }
+    if (sec.name === "BUILD") {            // break creeps in: no snares at first, everything rising in level
+      var lift = 0.35 + 0.55 * where.pos;
+      events = events.filter(function (e) { return where.pos >= 0.5 || e.role !== "SNARE"; });
+      events.forEach(function (e) { e.g *= lift; });
+    }
+    if (sec.name === "OUTRO") {            // collapse: hits turn into smears, hats thin out
+      events = events.filter(function (e) { return e.role !== "HAT" || r() > 0.4 + 0.5 * where.pos; });
+      events.forEach(function (e) {
+        if (e.role !== "HAT" && e.d >= 1 && e.op !== "TAIL") { e.op = "STRETCH"; e.grain = 60; e.seed = Math.floor(r() * 4294967296); e.rate = 1; delete e.rev; }
+      });
+    }
+    var done = finish(steps, meter, events);
+    done.synth = layer(subLine(done).concat(reeseLine(done), acidLine(done)));
+    done.drums = drumLine(done);
+    return done;
+
+    /* ADDED DRUMS: a two-step drum-and-bass pattern for the optional kit. { t, drum, g, s (picture), d (open hat length) }.
+       Kick on 1 and the "and" of 3, snare (with a clap) on 2 and 4, every bar: that never changes, so the beat is solid.
+       THE GROOVE around it (extra kick, ghost snares, open hats, 16th hats, percs) is chosen once per section and
+       repeats every two bars, so it sounds like a played loop, not a new pattern each bar. Only the fills are decided
+       bar by bar: the last beat at the end of a section and of some four-bar phrases. Nothing in the quiet sections.
+       It does not follow Intensity: more hits is not a better beat. Own random streams, so it never changes the rest.
+       "s" is the source slice whose picture a kick or snare shows when the kit is allowed to cut the video. */
+    function drumLine(bar) {
+      var out = [], steps = Math.round(bar.beats * 4), name = sec.name, st, base, i, j;
+      var drop = name === "DROP A" || name === "DROP B", heavy = name === "DROP B";
+      var own = rng32((barSeed(eng.seed, n, regen) ^ 0xD2D2D2D2) >>> 0);                        // this bar only
+      var loop = regen ? barSeed(eng.seed, n, regen) : barSeed(eng.seed, 500 + FORM.indexOf(sec) * 2 + n % 2, 0);
+      var rg = rng32((loop ^ 0x6A00D2D2) >>> 0);                                                // the two-bar groove
+      var pickKick = rg(), ghost = [rg(), rg(), rg()], openAt = [rg(), rg()], perc = [], extra = [];
+      for (i = 0; i < 6; i++) { perc.push([rg(), rg(), rg()]); }
+      for (i = 0; i < 8; i++) { extra.push(rg()); }
+      var wantFill = own(), fillKind = own();
+      function hit(at, drum, g, pic) {
+        if (at < 0 || at >= steps) { return; }
+        var h = { t: r5(at / 4), drum: drum, g: r5(g) };
+        if (pic !== undefined) { h.s = pic; }
+        out.push(h);
+      }
+      function kick(at, g) { hit(at, "K", g, kit.KICK[0]); }
+      function snare(at, g, turn) { hit(at, "S", g, kit.SNARE[(turn || 0) % kit.SNARE.length]); }   // fills flick through the snare pictures
+      function finish() {
+        out.sort(function (a, b) { return a.t - b.t; });
+        out.forEach(function (h, k) {                 // an open hat rings only until the next hat
+          if (h.drum !== "O") { return; }
+          for (var m = k + 1; m < out.length; m++) {
+            if ((out[m].drum === "C" || out[m].drum === "O") && out[m].t > h.t) { h.d = r5(out[m].t - h.t); break; }
+          }
+        });
+        return out;
+      }
+      if (name === "INTRO" || name === "INTERLUDE") { return out; }
+      if (name === "BUILD" && where.last) {              // end of the build: a snare roll that speeds up and swells
+        [0, 4, 8, 10, 12, 13, 14, 14.5, 15, 15.5].forEach(function (at, k) { snare(steps - 16 + at, 0.4 + 0.6 * k / 9, k); });
+        for (st = 0; st < steps; st += 2) { hit(st, "C", st % 4 === 0 ? 0.8 : 0.55); }
+        kick(0, 1);
+        return finish();
+      }
+      var kicks = [0, 10], snares = [4, 12];
+      if (drop) { kicks = pickKick < 0.2 ? [0, 6, 10] : pickKick < 0.32 ? [0, 3, 10] : pickKick < 0.42 ? [0, 10, 13] : [0, 10]; }
+      if (name === "BUILD") { kicks = where.pos >= 0.5 ? [0] : []; snares = []; }           // hats first, then a kick
+      if (name === "OUTRO" && where.pos >= 0.5) { kicks = [0]; snares = [4]; }               // thinning out
+      var fill = drop && (where.last || (n % 4 === 3 && wantFill < 0.5)), body = fill ? steps - 4 : steps;
+      var percs = drop || (name === "BUILD" && where.pos >= 0.5) || (name === "OUTRO" && where.pos < 0.5), played;
+      for (base = 0; base < steps; base += 16) {
+        kicks.forEach(function (k) { if (base + k < body) { kick(base + k, k === 0 || k === 10 ? 1 : 0.75); } });
+        snares.forEach(function (k) {
+          if (base + k < body) { snare(base + k, 1); if (drop) { hit(base + k, "L", 0.8); } }                 // clap on the backbeat
+        });
+        if (drop) { [7, 9, 15].forEach(function (k, m) { if (ghost[m] < (heavy ? 0.3 : 0.15) && base + k < body) { snare(base + k, 0.3); } }); }
+        played = 0;
+        if (percs) {
+          [3, 7, 9, 11, 13, 15].forEach(function (k, m) {     // up to three off-beat perc hits per bar
+            if (perc[m][0] < 0.32 && played < 3 && base + k < body) {
+              hit(base + k, perc[m][1] < 0.5 ? "P" : "Q", (0.45 + 0.3 * perc[m][2]) * (drop ? 1 : 0.7)); played++;
+            }
+          });
+        }
+      }
+      for (st = 0; st < body; st++) {
+        if (st % 2 === 0) {
+          var open = drop && ((st % 16 === 6 && openAt[0] < 0.5) || (st % 16 === 14 && openAt[1] < 0.5));
+          hit(st, open ? "O" : "C", st % 4 === 0 ? 0.8 : 0.55);
+        } else if (drop && extra[(st >> 1) % 8] < (heavy ? 0.25 : 0.1)) { hit(st, "C", 0.35); }
+      }
+      if (fill) {
+        var at = steps - 4;
+        if (fillKind < 0.35) { for (j = 0; j < 8; j++) { snare(at + j / 2, 0.35 + 0.65 * j / 7, j); } }                  // roll
+        else if (fillKind < 0.7) { kick(at, 0.9); for (j = 0; j < 4; j++) { snare(at + j, 0.5 + 0.5 * j / 3, j); } }     // four snares, rising
+        else { snare(at, 1, 0); kick(at + 1, 0.8); snare(at + 2, 0.7, 1); snare(at + 2.5, 0.5, 2); snare(at + 3, 0.9, 3); }
+      }
+      return finish();
+    }
+
+    /* Every note is written twice: first played by its source slice (s, rate; rate0 = slide from), then by the
+       plain oscillator (no s). The oscillator copies only sound when the Synth switch is on. */
+    function layer(notes) {
+      var fromSource = [];
+      notes.forEach(function (e) {
+        var src = kit.src && kit.src[e.voice];
+        if (!src) { return; }
+        var base = kit.root + SRC_BASE[e.voice];
+        var o = { t: e.t, d: e.d, voice: e.voice, s: src.s, g: r5(src.g * (e.acc ? 1.4 : 1)),
+                  rate: r5(Math.pow(2, (src.semis + e.note - base + (e.cents || 0) / 100) / 12)) };
+        if (e.from !== undefined) { o.rate0 = r5(Math.pow(2, (src.semis + e.from - base) / 12)); }
+        if (e.acc) { o.acc = true; }
+        fromSource.push(o);
+      });
+      return fromSource.concat(notes);
+    }
+
+    /* ACID voice: a 16th-note riff in DROP B only. Some notes are accented (louder, filter opens wider),
+       some slide in from the note before. The riff repeats every two bars; a regenerated bar gets its own.
+       Own random stream, four numbers per step whether or not the step plays. */
+    function acidLine(bar) {
+      if (sec.name !== "DROP B") { return []; }
+      var out = [], rs = rng32((barSeed(eng.seed, n % 2, regen) ^ 0xAC1DAC1D) >>> 0), prev = null;
+      for (var st = 0; st < bar.beats * 4; st++) {
+        var play = rs() < 0.7, note = kit.root + 24 + ACID_SCALE[Math.floor(rs() * ACID_SCALE.length)];
+        var acc = rs() < 0.25, slide = rs() < 0.25;
+        if (!play) { prev = null; continue; }
+        var e = { t: st / 4, d: 0.2, voice: "ACID", note: note, g: acc ? 0.2 : 0.14 };
+        if (acc) { e.acc = true; }
+        if (slide && prev && prev.note !== note) { e.from = prev.note; prev.d = 0.25; }   // slide: the note before runs right into it
+        out.push(e); prev = e;
+      }
+      return out;
+    }
+
+    /* MUSIC BOX voice: sparse, slightly out-of-tune notes from a minor pentatonic scale over the root,
+       on the half-beats of the quiet sections. Each note's detune (in cents) is stored in the event. */
+    function boxLine(bar, density) {
+      var out = [], rs = rng32((barSeed(eng.seed, n, regen) ^ 0x0B0B0B0B) >>> 0);
+      for (var half = 0; half < bar.beats * 2; half++) {
+        var play = rs() < density, pick = BOX_SCALE[Math.floor(rs() * BOX_SCALE.length)], cents = Math.round((rs() - 0.5) * 30);
+        if (play) { out.push({ t: half / 2, d: 1.5, voice: "BOX", note: kit.root + 36 + pick, cents: cents, g: 0.22 }); }
+      }
+      return out;
+    }
+    /* REESE voice: two detuned saws through a lowpass, one octave above the sub, in DROP B only. */
+    function reeseLine(bar) {
+      if (sec.name !== "DROP B") { return []; }
+      return subLine(bar).map(function (e) { return { t: e.t, d: e.d, voice: "REESE", note: e.note + 12, g: 0.26 }; });
+    }
+
+    /* SUB voice: one bass note under each kick, held until the next kick. Mostly the root note;
+       in the second half of a bar it sometimes moves, and a moved note slides in (portamento).
+       It has its own random stream, so switching the sub on or off never changes the drums. */
+    function subLine(bar) {
+      var out = [], on = sec.name === "DROP A" || sec.name === "DROP B" || sec.name === "OUTRO" || (sec.name === "BUILD" && where.pos >= 0.5);
+      if (!on) { return out; }
+      var rs = rng32((barSeed(eng.seed, n, regen) ^ 0x5B5B5B5B) >>> 0), starts = [], prev = null;
+      bar.events.forEach(function (e) {
+        if (e.role === "KICK" && (!starts.length || e.t - starts[starts.length - 1] >= 0.5)) { starts.push(e.t); }
+      });
+      if (!starts.length) { starts = [0]; }
+      starts.forEach(function (t, k) {
+        var end = k + 1 < starts.length ? starts[k + 1] : bar.beats;
+        var move = t >= bar.beats / 2 && rs() < 0.35 ? [3, 5, 7, -2, 12][Math.floor(rs() * 5)] : 0;
+        var e = { t: r5(t), d: r5(Math.min(2, end - t)), voice: "SUB", note: kit.root + move, g: 0.42 };
+        if (prev !== null && prev !== e.note) { e.from = prev; }
+        out.push(e); prev = e.note;
+      });
+      return out;
+    }
+  }
+
+  function readParams() {
+    eng.bpm = Math.max(60, Math.min(300, +$("engBpm").value || 174));
+    eng.nbars = Math.max(2, Math.min(64, Math.round(+$("engBars").value) || 16));
+    eng.seed = Math.max(0, Math.floor(+$("engSeed").value) || 0) >>> 0;
+    $("engBpm").value = eng.bpm; $("engBars").value = eng.nbars; $("engSeed").value = eng.seed;
+  }
+  function generate(keepLocked) {
+    if (!cur || !cur.a) { return; }
+    readParams();
+    var kit = buildKit();
+    if (!kit) { log("No slices left to build a break from.", true); return; }
+    if (kit.guessed.length) { log("No slices tagged " + kit.guessed.join(" / ") + ". Standing in other slices for now."); }
+    var old = eng.edl ? eng.edl.bars : [], bars = [];
+    for (var n = 0; n < eng.nbars; n++) {
+      bars.push(keepLocked && old[n] && old[n].locked ? old[n] : genBar(n, 0, kit));
+    }
+    eng.edl = { version: 1, video: cur.meta.id, seed: eng.seed, bpm: eng.bpm, intensity: eng.intensity,
+                ops: JSON.parse(JSON.stringify(eng.ops)), kit: kit, mute: eng.mute, mix: eng.mix, snd: eng.snd, bars: bars };
+    applyRetrig();
+    if (eng.sel >= bars.length) { eng.sel = -1; }
+    paintBars();
+    loadKit().catch(function () {});                 // fetch the few slices the break uses, ahead of Play
+  }
+  function loadKit() {
+    var want = {}, kit = eng.edl.kit;
+    kit.KICK.concat(kit.SNARE, kit.HAT, kit.TONAL).forEach(function (i) { want[i] = 1; });
+    eng.edl.bars.forEach(function (b) {
+      b.events.forEach(function (e) { want[e.s] = 1; });
+      (b.synth || []).forEach(function (e) { if (e.s !== undefined) { want[e.s] = 1; } });
+    });
+    var P = sound("DRUMS");                          // the four kit samples in use; a missing one must not stop Play
+    var kit = eng.mute.DRUMS ? [] : Object.keys(DRUM_PICK).map(function (d) { return loadDrum(d, P[DRUM_PICK[d]]).catch(function () {}); });
+    return Promise.all(Object.keys(want).map(function (i) { return loadClip(+i); }).concat(kit));
+  }
+  /* One sample of the added drum kit, fetched and decoded once. Its peak is measured so every sample plays equally loud. */
+  function loadDrum(drum, n) {
+    var key = drum + n;
+    if (eng.kit[key]) { return Promise.resolve(eng.kit[key]); }
+    if (eng.kitWait[key]) { return eng.kitWait[key]; }
+    if (!actx) { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+    eng.kitWait[key] = fetch("/kit/" + drum + "/" + n + ".wav")
+      .then(function (r) { if (!r.ok) { throw new Error(); } return r.arrayBuffer(); })
+      .then(function (bytes) { return actx.decodeAudioData(bytes); })
+      .then(function (buf) {
+        var peak = 0;
+        for (var c = 0; c < buf.numberOfChannels; c++) {
+          var data = buf.getChannelData(c);
+          for (var i = 0; i < data.length; i++) { var a = data[i] < 0 ? -data[i] : data[i]; if (a > peak) { peak = a; } }
+        }
+        delete eng.kitWait[key];
+        return (eng.kit[key] = { buf: buf, norm: peak > 0 ? 1 / peak : 0 });
+      }, function () { delete eng.kitWait[key]; throw new Error(); });
+    return eng.kitWait[key];
+  }
+  /* How many samples of each drum the drumnbasskit folder holds: sets how far the sample sliders go. */
+  function loadKitList() {
+    api("/api/kit").then(function (res) {
+      eng.kitCount = res.data.counts || {};
+      SND.DRUMS.forEach(function (c) {
+        Object.keys(DRUM_PICK).forEach(function (d) { if (DRUM_PICK[d] === c[0]) { c[3] = Math.max(1, eng.kitCount[d] || 1); } });
+      });
+      if (!res.data.ok) { log("Added drums: no samples found in the drumnbasskit folder.", true); }
+      if (eng.open === "DRUMS") { paintSound(); }
+    }).catch(function () {                                 // a server from before the added drums existed answers "not found"
+      log("Added drums cannot load their samples: the server window is running an older version. " +
+          "Close the black window and run start.bat again.", true);
+    });
+  }
+  function regenBar() {
+    var b = eng.edl && eng.edl.bars[eng.sel];
+    if (!b) { return; }
+    if (b.locked) { log("Bar " + (b.n + 1) + " is locked."); return; }
+    var kit = buildKit(); if (!kit) { return; }
+    eng.edl.bars[eng.sel] = genBar(b.n, b.regen + 1, kit);
+    applyRetrig();
+    paintBars();
+  }
+  function lockBar() {
+    var b = eng.edl && eng.edl.bars[eng.sel];
+    if (!b) { return; }
+    b.locked = !b.locked; paintBars();
+  }
+
+  /* ---- draw the bars -------------------------------------------------- */
+  function drawBar(canvas, bar) {
+    var g = canvas.getContext("2d"), W = canvas.width, H = canvas.height, lane = (H - 6) / 3;
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = g.strokeStyle = getComputedStyle(document.body).color;
+    g.globalAlpha = 0.25;
+    for (var q = 1; q < bar.beats; q++) { g.fillRect(Math.round(q / bar.beats * W), 0, 1, H); }
+    g.globalAlpha = 1;
+    bar.events.forEach(function (e) {
+      var x = e.t / bar.beats * W, w = Math.max(2, e.d / bar.beats * W - 1), y = LANES[e.role] * lane + 2, h = lane - 4;
+      g.globalAlpha = eng.mute[e.role] ? 0.15 : 1;              // switched-off instruments are drawn faint
+      if (e.op === "REVERSE") { g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1); }
+      else if (e.op === "STRETCH") { g.fillRect(x, y + h / 2 - 1, w, 3); g.fillRect(x, y, 2, h); }
+      else if (e.op === "TAIL") {
+        g.beginPath();
+        if (e.rate2 < 1) { g.moveTo(x, y); g.lineTo(x + w, y + h); g.lineTo(x, y + h); }
+        else { g.moveTo(x, y + h); g.lineTo(x + w, y); g.lineTo(x + w, y + h); }
+        g.closePath(); g.fill();
+      }
+      else { var hh = Math.max(3, h * Math.min(1, e.g)); g.fillRect(x, y + h - hh, w, hh); }
+    });
+    g.globalAlpha = eng.mute.DRUMS ? 0.15 : 1;
+    (bar.drums || []).forEach(function (d) {          // added kick and snare: small marks along the top edge
+      if (d.drum === "K" || d.drum === "S") { g.fillRect(Math.round(d.t / bar.beats * W), 0, d.drum === "K" ? 5 : 2, 3); }
+    });
+    (bar.synth || []).forEach(function (e) {          // synth notes: a strip along the bottom edge
+      g.globalAlpha = (e.s === undefined ? eng.mute.SYNTH : eng.mute[e.voice]) ? 0.15 : 1;
+      g.fillRect(e.t / bar.beats * W, H - 4, Math.max(2, e.d / bar.beats * W - 2), 4);
+    });
+  }
+  function paintBars() {
+    var box = $("bars"), edl = eng.edl, total = 0, beats = 0;
+    box.textContent = "";
+    edl.bars.forEach(function (bar, k) {
+      total += bar.events.length; beats += bar.beats;
+      var cell = document.createElement("button"); cell.type = "button"; cell.dataset.k = k;
+      cell.className = "barcell" + (bar.locked ? " locked" : "") + (k === eng.sel ? " sel" : "") + (k === eng.shown ? " now" : "");
+      var head = document.createElement("span"); head.className = "bh";
+      var a = document.createElement("span"); a.textContent = (k + 1 < 10 ? "0" : "") + (k + 1);
+      var b = document.createElement("span");
+      b.textContent = (bar.locked ? "LOCK " : "") + (eng.form && bar.sec ? bar.sec + " " : "") + (bar.meter === "4/4" ? "" : bar.meter);
+      head.appendChild(a); head.appendChild(b);
+      var cv = document.createElement("canvas"); cv.width = 256; cv.height = 48;
+      cell.appendChild(head); cell.appendChild(cv); box.appendChild(cell);
+      drawBar(cv, bar);
+    });
+    var kit = edl.kit;
+    $("engInfo").textContent = edl.bars.length + " bars  /  " + beats + " beats  /  " + total + " events  /  kit " +
+      kit.KICK.length + " kick " + kit.SNARE.length + " snare " + kit.HAT.length + " hat  /  root " +
+      NOTE_NAMES[kit.root % 12];
+    var selBar = edl.bars[eng.sel];
+    $("engRegen").disabled = !selBar; $("engLock").disabled = !selBar;
+    $("engLock").textContent = selBar && selBar.locked ? "Unlock bar" : "Lock bar";
+    $("engLock").className = selBar && selBar.locked ? "on" : "";
+  }
+  $("bars").addEventListener("click", function (ev) {
+    var cell = ev.target.closest(".barcell");
+    if (!cell) { return; }
+    eng.focus = "bars"; eng.sel = +cell.dataset.k; paintBars();
+  });
+
+  /* ---- controls -------------------------------------------------------- */
+  function buildOps() {
+    var box = $("ops"); box.textContent = "";
+    [{ id: "intensity", name: "Intensity" }].concat(OPS).forEach(function (o) {
+      var cell = document.createElement("div");
+      var row = document.createElement("div"); row.className = "row";
+      var name = document.createElement("span"); name.className = "small"; name.textContent = o.name;
+      var val = document.createElement("b");
+      var range = document.createElement("input"); range.type = "range"; range.min = 0; range.max = 100; range.step = 1;
+      range.value = o.id === "intensity" ? eng.intensity : eng.ops[o.id];
+      range.setAttribute("aria-label", o.name);
+      val.textContent = range.value;
+      range.addEventListener("input", function () {
+        val.textContent = range.value;
+        if (o.id === "intensity") { eng.intensity = +range.value; } else { eng.ops[o.id] = +range.value; }
+      });
+      range.addEventListener("change", function () { generate(true); });   // on release: rebuild, locked bars stay
+      row.appendChild(name); row.appendChild(val); cell.appendChild(row); cell.appendChild(range); box.appendChild(cell);
+    });
+  }
+  /* Mixer sliders. They only change levels: nothing is regenerated, and they work while the break plays. */
+  function buildMixer() {
+    var box = $("mixer"); box.textContent = "";
+    MIXER.forEach(function (m) {
+      var cell = document.createElement("div");
+      var row = document.createElement("div"); row.className = "row";
+      var name = document.createElement("span"); name.className = "small"; name.textContent = m[1];
+      var val = document.createElement("b");
+      var range = document.createElement("input"); range.type = "range"; range.min = 0; range.max = 150; range.step = 1;
+      range.value = eng.mix[m[0]]; val.textContent = range.value;
+      range.setAttribute("aria-label", m[1] + " volume");
+      cell.title = (m[2] || "Volume of " + m[1].toLowerCase() + " inside the Instruments group") + ". 100 = as generated. Double-click to reset.";
+      function set(v) { range.value = v; val.textContent = range.value; eng.mix[m[0]] = +range.value; applyMix(); }
+      range.addEventListener("input", function () { set(range.value); });
+      cell.addEventListener("dblclick", function () { set(100); });
+      row.appendChild(name); row.appendChild(val); cell.appendChild(row); cell.appendChild(range); box.appendChild(cell);
+    });
+  }
+  /* Sound panels. The Sound row has one button per source-made instrument; pressing it opens that instrument's
+     panel underneath (one at a time), pressing it again closes it. Nothing here regenerates the arrangement. */
+  function buildSound() {
+    INSTRUMENTS.forEach(function (pair) {
+      if (!SND[pair[0]]) { return; }
+      var b = document.createElement("button"); b.type = "button"; b.textContent = pair[1]; b.dataset.v = pair[0];
+      b.title = "Show or hide the sound controls for " + pair[1].toLowerCase();
+      b.addEventListener("click", function () { eng.open = eng.open === pair[0] ? null : pair[0]; paintSound(); });
+      $("soundBar").appendChild(b);
+    });
+  }
+  function soundChanged() { applyRetrig(); applySnd(); }
+  function paintSound() {
+    var v = eng.open, panel = $("soundPanel"), label = "";
+    Array.prototype.forEach.call($("soundBar").querySelectorAll("button"), function (b) {
+      b.className = b.dataset.v === v ? "on" : "";
+      if (b.dataset.v === v) { label = b.textContent; }
+    });
+    panel.textContent = ""; panel.hidden = !v;
+    if (!v) { return; }
+    var set = eng.snd[v], off = set.on === false;
+    var head = document.createElement("div"); head.className = "bar";
+    var note = document.createElement("span"); note.className = "note small";
+    note.textContent = v === "DRUMS" ? "The added drum kit: your samples from the drumnbasskit folder, separate from the Kick, Snare and Hat slices."
+      : "Shapes the source-made " + label.toLowerCase() + ". The Synth layer keeps its own sound.";
+    var rows = v === "DRUMS" ? DRUM_ROWS : SND_ROWS[v], grids = [];   // controls per row; the rest is the effects row
+    function gridFor(k) {
+      var row = 0, edge = 0;
+      while (row < rows.length && k >= (edge += rows[row])) { row++; }
+      while (grids.length <= row) { var more = document.createElement("div"); more.className = "ops snd"; grids.push(more); }
+      return grids[row];
+    }
+    var bypass = document.createElement("button"); bypass.type = "button"; bypass.textContent = "Bypass"; bypass.className = off ? "on" : "";
+    bypass.title = "Hear the default sound without losing these settings (black = bypassed)";
+    bypass.addEventListener("click", function () { set.on = off; soundChanged(); paintSound(); });
+    var reset = document.createElement("button"); reset.type = "button"; reset.textContent = "Reset";
+    reset.title = "Put every control of this instrument back to its default";
+    reset.addEventListener("click", function () { SND[v].forEach(function (c) { set[c[0]] = c[5]; }); soundChanged(); paintSound(); });
+    head.appendChild(note); head.appendChild(bypass); head.appendChild(reset); panel.appendChild(head);
+    SND[v].forEach(function (c, k) {
+      var key = c[0], lo = c[2], hi = c[3], log = c[7];
+      var cell = document.createElement("div"), row = document.createElement("div"); row.className = "row";
+      var name = document.createElement("span"); name.className = "small"; name.textContent = c[1];
+      var val = document.createElement("b"), range = document.createElement("input"); range.type = "range";
+      range.setAttribute("aria-label", label + " " + c[1]); range.disabled = off;
+      cell.title = SND_HELP[key] + ". Double-click to reset.";
+      if (log) { range.min = 0; range.max = 1000; range.step = 1; } else { range.min = lo; range.max = hi; range.step = c[4]; }
+      function show() {
+        range.value = log ? Math.round(1000 * Math.log(set[key] / lo) / Math.log(hi / lo)) : set[key];
+        val.textContent = key === "rtg" ? RETRIG_NAMES[set[key]] : (key === "loop" || key === "grain") && !set[key] ? "Off" :
+          (v === "DRUMS" && key === "cut") || key === "back" ? (set[key] ? "On" : "Off") : key === "dtime" ? TIME_NAMES[set[key]] : (key === "oct" || key === "tune") && set[key] > 0 ? "+" + set[key] : set[key];
+        if (c[6] && val.textContent !== "Off") { var unit = document.createElement("i"); unit.textContent = c[6]; val.appendChild(unit); }
+      }
+      range.addEventListener("input", function () {
+        set[key] = log ? Math.round(lo * Math.pow(hi / lo, range.value / 1000)) : +range.value;
+        show(); soundChanged();
+        if (v === "DRUMS") { Object.keys(DRUM_PICK).forEach(function (d) { if (DRUM_PICK[d] === key) { loadDrum(d, set[key]).catch(function () {}); } }); }
+      });
+      cell.addEventListener("dblclick", function () { if (!off) { set[key] = c[5]; show(); soundChanged(); } });
+      show();
+      row.appendChild(name); row.appendChild(val); cell.appendChild(row); cell.appendChild(range); gridFor(k).appendChild(cell);
+    });
+    grids.forEach(function (one) { panel.appendChild(one); });
+  }
+  /* The preview's mixing desk: slices -> samples bus; each instrument -> its own level -> instruments bus;
+     both buses -> master level -> limiter -> speakers. Built once, the first time Play is pressed. */
+  function buildBus() {
+    if (eng.bus) { return; }
+    var b = eng.bus = {}, comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -8; comp.ratio.value = 12; comp.attack.value = 0.003; comp.release.value = 0.12;
+    eng.master = actx.createGain(); eng.master.connect(comp); comp.connect(actx.destination);
+    MIXER.forEach(function (m) { if (m[0] !== "master") { b[m[0]] = actx.createGain(); } });
+    b.samples.connect(eng.master); b.instruments.connect(eng.master);
+    ["SUB", "REESE", "BOX", "ACID", "SYNTH", "DRUMS"].forEach(function (v) { b[v].connect(b.instruments); });
+    // Each instrument's channel: notes -> inp -> (bits + rate, when used) -> post -> its mixer level. Delay and reverb hang off post.
+    Object.keys(SND).forEach(function (v) {
+      eng.inp[v] = actx.createGain(); eng.post[v] = actx.createGain();
+      eng.inp[v].connect(eng.post[v]); eng.post[v].connect(b[v]);
+    });
+    if (actx.audioWorklet) {                       // the bits + rate effect runs as a small audio worklet, loaded from this page
+      actx.audioWorklet.addModule(URL.createObjectURL(new Blob([CRUSH_CODE], { type: "application/javascript" })))
+        .then(function () { eng.crushReady = true; applySnd(); },
+              function () { log("Bits and Rate cannot be previewed in this browser. Exports still have them.", true); });
+    }
+    applyMix(true); applySnd();
+  }
+  function applyMix(now) {
+    if (!eng.bus) { return; }
+    function put(node, value) {
+      if (now) { node.gain.value = value; } else { node.gain.setTargetAtTime(value, actx.currentTime, 0.015); }   // no zipper noise
+    }
+    put(eng.master, MASTER_TRIM * level(eng.mix.master));
+    Object.keys(eng.bus).forEach(function (k) { put(eng.bus[k], level(eng.mix[k])); });
+  }
+  $("engGen").addEventListener("click", function () { generate(true); });
+  $("engNewSeed").addEventListener("click", function () {
+    $("engSeed").value = Math.floor(Math.random() * 1000000); generate(true);
+  });
+  $("engSeed").addEventListener("change", function () { generate(true); });
+  /* Instrument switches. They mute, they do not regenerate: the arrangement stays exactly the same,
+     so an instrument can be dropped and brought back at will. Renders respect them too. */
+  INSTRUMENTS.forEach(function (pair) {
+    if (pair[0] === "SUB") { var head = document.createElement("label"); head.textContent = "Instruments"; $("instruments").appendChild(head); }
+    var b = document.createElement("button"); b.type = "button"; b.textContent = pair[1]; b.className = eng.mute[pair[0]] ? "" : "on";
+    b.title = "Turn " + pair[1].toLowerCase() + " on or off (black = on)";
+    b.addEventListener("click", function () {
+      if (eng.mute[pair[0]]) { delete eng.mute[pair[0]]; } else { eng.mute[pair[0]] = true; }
+      b.className = eng.mute[pair[0]] ? "" : "on";
+      if (eng.edl) { paintBars(); }
+    });
+    $("instruments").appendChild(b);
+  });
+  $("engForm").addEventListener("click", function () {
+    eng.form = !eng.form; this.className = eng.form ? "on" : ""; generate(true);
+  });
+  $("engBars").addEventListener("change", function () { generate(true); });
+  $("engBpm").addEventListener("change", function () { readParams(); if (eng.edl) { eng.edl.bpm = eng.bpm; } applySnd(); });
+  $("engRegen").addEventListener("click", regenBar);
+  $("engLock").addEventListener("click", lockBar);
+  $("engPlay").addEventListener("click", function () { toggleEngine(); });
+
+  /* ---- live preview ---------------------------------------------------- */
+  function reversedSlice(i) {
+    if (eng.revCache[i]) { return eng.revCache[i]; }
+    var clip = clips[i], len = clip.length;
+    var out = actx.createBuffer(clip.numberOfChannels, len, clip.sampleRate);
+    for (var c = 0; c < clip.numberOfChannels; c++) {
+      var src = clip.getChannelData(c), dst = out.getChannelData(c);
+      for (var k = 0; k < len; k++) { dst[k] = src[len - 1 - k]; }
+    }
+    return (eng.revCache[i] = out);
+  }
+  /* A slice followed by itself backwards. Looped, it never runs out and has no jump at the loop points. */
+  function pingPong(i) {
+    if (eng.revCache["pp" + i]) { return eng.revCache["pp" + i]; }
+    var clip = clips[i], len = clip.length;
+    var out = actx.createBuffer(clip.numberOfChannels, len * 2, clip.sampleRate);
+    for (var c = 0; c < clip.numberOfChannels; c++) {
+      var a = clip.getChannelData(c), d = out.getChannelData(c);
+      for (var k = 0; k < len; k++) { d[k] = a[k]; d[len * 2 - 1 - k] = a[k]; }
+    }
+    return (eng.revCache["pp" + i] = out);
+  }
+  function voice(buffer, when, offset, length, rate, rate2, gain, dur, curve) {
+    var node = actx.createBufferSource(), amp = actx.createGain();
+    node.buffer = buffer;
+    node.playbackRate.setValueAtTime(rate, when);
+    if (rate2) { node.playbackRate.exponentialRampToValueAtTime(rate2, when + dur); }
+    if (curve) { amp.gain.setValueCurveAtTime(curve, when, dur); }
+    else {
+      var fade = Math.min(0.003, dur / 3);                       // short fades: no clicks at slice edges
+      amp.gain.setValueAtTime(0, when);
+      amp.gain.linearRampToValueAtTime(gain, when + fade);
+      amp.gain.setValueAtTime(gain, when + dur - fade);
+      amp.gain.linearRampToValueAtTime(0, when + dur);
+    }
+    node.connect(amp); amp.connect(eng.bus.samples);
+    node.start(when, offset, length);                            // "length" stops it running into the next slice
+    node.stop(when + dur + 0.02);
+    eng.live.push(node);
+    node.onended = function () { var k = eng.live.indexOf(node); if (k >= 0) { eng.live.splice(k, 1); } amp.disconnect(); };
+  }
+  function scheduleEvent(e, barTime, spb) {
+    if (eng.mute[e.role]) { return; }                             // instrument switched off
+    var clip = clips[e.s];
+    if (!clip) { loadClip(e.s).catch(function () {}); return; }  // not loaded yet: skip this once
+    var srcLen = clip.duration, when = barTime + e.t * spb, dur = e.d * spb;
+    if (e.op === "STRETCH") {
+      // granular smear: many short overlapping grains creeping slowly through the slice
+      var r = rng32(e.seed), grain = Math.min(e.grain / 1000, srcLen), hop = grain / 2, count = Math.max(1, Math.ceil(dur / hop));
+      if (!eng.hann) { eng.hann = new Float32Array(64); for (var h = 0; h < 64; h++) { eng.hann[h] = 0.5 - 0.5 * Math.cos(2 * Math.PI * h / 63); } }
+      var curve = new Float32Array(64); for (var c = 0; c < 64; c++) { curve[c] = eng.hann[c] * e.g; }
+      for (var k = 0; k < count; k++) {
+        var pos = Math.max(0, Math.min(srcLen - grain, (k / count) * srcLen * 0.6 + (r() - 0.5) * grain));
+        voice(clip, when + k * hop, pos, grain, 1, 0, e.g, grain, curve);
+      }
+      return;
+    }
+    if (!e.rate2) { dur = Math.min(dur, srcLen / e.rate); }
+    if (dur < 0.004) { return; }
+    if (e.rev) { voice(reversedSlice(e.s), when, 0, srcLen, e.rate, e.rate2, e.g, dur); }
+    else { voice(clip, when, 0, srcLen, e.rate, e.rate2, e.g, dur); }
+  }
+  /* The tanh curve for Drive / Distortion: 0 does nothing, 100 is heavy. Same formula as drive() in render.py. */
+  function driveCurve(amount) {
+    var key = "d" + amount;
+    if (eng.curves[key]) { return eng.curves[key]; }
+    var n = 4097, curve = new Float32Array(n), k = 1 + 24 * amount * amount / 10000;
+    for (var i = 0; i < n; i++) { curve[i] = Math.tanh(k * (i / (n - 1) * 2 - 1)) / Math.sqrt(k); }
+    return (eng.curves[key] = curve);
+  }
+  /* The reverb's room: seeded noise dying away over REVERB_SECONDS, total energy 1. Same recipe in render.py. */
+  function impulse() {
+    if (eng.ir) { return eng.ir; }
+    var sr = actx.sampleRate, n = Math.floor(REVERB_SECONDS * sr), buf = actx.createBuffer(2, n, sr), r = rng32(REVERB_SEED);
+    var L = buf.getChannelData(0), R = buf.getChannelData(1), sum = 0, i;
+    for (i = 0; i < n; i++) {
+      var fall = Math.exp(-6.908 * i / n);                       // 60 dB down by the end
+      L[i] = (r() * 2 - 1) * fall; R[i] = (r() * 2 - 1) * fall; sum += L[i] * L[i];
+    }
+    for (i = 0; i < n; i++) { L[i] /= Math.sqrt(sum); R[i] /= Math.sqrt(sum); }
+    return (eng.ir = buf);
+  }
+  /* Bits + Rate: every time the reduced-rate clock ticks, take one sample, round it to the bit depth, and hold it
+     until the next tick. Same sums as crush() in render.py. */
+  var CRUSH_CODE = [
+    'registerProcessor("bs-crush", class extends AudioWorkletProcessor {',
+    '  static get parameterDescriptors() {',
+    '    return [{ name: "bits", defaultValue: 16, automationRate: "k-rate" }, { name: "rate", defaultValue: 44100, automationRate: "k-rate" }];',
+    '  }',
+    '  constructor() { super(); this.phase = 1; this.held = [0, 0]; }',
+    '  process(inputs, outputs, params) {',
+    '    var inp = inputs[0], out = outputs[0], bits = params.bits[0], q = Math.pow(2, bits - 1);',
+    '    var step = Math.min(1, params.rate[0] / sampleRate);',
+    '    if (!inp.length) { inp = null; }',
+    '    for (var i = 0; i < out[0].length; i++) {',
+    '      this.phase += step;',
+    '      var tick = this.phase >= 1;',
+    '      if (tick) { this.phase -= 1; }',
+    '      for (var c = 0; c < out.length; c++) {',
+    '        if (tick) {',
+    '          var x = inp ? (inp[c] || inp[0])[i] : 0;',
+    '          this.held[c] = bits >= 16 ? x : Math.floor(x * q + 0.5) / q;',
+    '        }',
+    '        out[c][i] = this.held[c];',
+    '      }',
+    '    }',
+    '    return true;',
+    '  }',
+    '});'].join("\n");
+  /* Settings that live in an instrument's channel rather than in each note: bits + rate, delay, reverb.
+     Each effect is only built the first time its instrument uses it. Safe to call at any time. */
+  function applySnd() {
+    if (!eng.bus) { return; }
+    var spb = 60 / eng.bpm, now = actx.currentTime;
+    Object.keys(SND).forEach(function (v) {
+      var P = sound(v), fx = eng.fx[v] || (eng.fx[v] = {});
+      var drv = P.drv || 0;                                      // drive on the whole channel (only the added drums have it)
+      if (drv > 0 && !fx.shaper) { fx.shaper = actx.createWaveShaper(); }
+      if ((P.bits < 16 || P.srate < 44100) && !fx.crush && eng.crushReady) {
+        fx.crush = new AudioWorkletNode(actx, "bs-crush", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2],
+                                                           channelCount: 2, channelCountMode: "explicit" });
+      }
+      var chain = (drv > 0 ? "d" : "") + (fx.crush ? "c" : "");     // inp -> drive -> bits + rate -> post, each only when in use
+      if (chain !== (fx.chain || "")) {
+        var node = eng.inp[v];
+        node.disconnect(); if (fx.shaper) { fx.shaper.disconnect(); }
+        if (drv > 0) { node.connect(fx.shaper); node = fx.shaper; }
+        if (fx.crush) { node.connect(fx.crush); node = fx.crush; }
+        node.connect(eng.post[v]);
+        fx.chain = chain;
+      }
+      if (fx.shaper && drv > 0) { fx.shaper.curve = driveCurve(drv); }
+      if (fx.crush) {
+        fx.crush.parameters.get("bits").value = P.bits;
+        fx.crush.parameters.get("rate").value = P.srate >= 44100 ? actx.sampleRate : P.srate;
+      }
+      if (P.dly > 0 && !fx.delay) {                              // echoes: post -> send -> delay (feeding itself) -> mixer level
+        fx.dsend = actx.createGain(); fx.delay = actx.createDelay(2); fx.dfb = actx.createGain();
+        fx.dsend.gain.value = 0;
+        eng.post[v].connect(fx.dsend); fx.dsend.connect(fx.delay); fx.delay.connect(eng.bus[v]);
+        fx.delay.connect(fx.dfb); fx.dfb.connect(fx.delay);
+      }
+      if (fx.delay) {
+        fx.dsend.gain.setTargetAtTime(P.dly * P.dly / 10000, now, 0.015);
+        fx.delay.delayTime.value = P.dtime * spb; fx.dfb.gain.value = P.dfb / 100;
+      }
+      if (P.rev > 0 && !fx.rsend) {                              // room: post -> send -> convolver -> mixer level
+        fx.rsend = actx.createGain(); fx.room = actx.createConvolver();
+        fx.room.normalize = false; fx.room.buffer = impulse();
+        fx.rsend.gain.value = 0;
+        eng.post[v].connect(fx.rsend); fx.rsend.connect(fx.room); fx.room.connect(eng.bus[v]);
+      }
+      if (fx.rsend) { fx.rsend.gain.setTargetAtTime(P.rev * P.rev / 10000, now, 0.015); }
+    });
+  }
+  /* Pitched voices. Each one is written twice with the same maths: here for the live preview, and in render.py
+     (the pitched-voices loop) for the export. Change one, change the other.
+     A note with a slice number is the SOURCE-MADE instrument and follows that instrument's Sound panel (P).
+     A note without one is the plain oscillator of the Synth layer: it always uses the default sound. */
+  function hann() {
+    if (!eng.hann) { eng.hann = new Float32Array(64); for (var h = 0; h < 64; h++) { eng.hann[h] = 0.5 - 0.5 * Math.cos(2 * Math.PI * h / 63); } }
+    return eng.hann;
+  }
+  /* A note with a retrigger step (rt, in beats) is played as a row of short notes that each start the sound again.
+     The step is written into the note by applyRetrig, so the preview and the export chop it the same way. */
+  function playNote(e, barTime, spb) {
+    if (!e.rt) { scheduleSynth(e, barTime, spb); return; }
+    for (var k = 0, at = 0; e.d - at > 0.02; k++, at += e.rt) {
+      var piece = {}; Object.keys(e).forEach(function (key) { piece[key] = e[key]; });
+      piece.t = e.t + at; piece.d = Math.min(e.rt, e.d - at); delete piece.rt;
+      if (k) { delete piece.rate0; delete piece.from; }                  // only the first one slides in
+      scheduleSynth(piece, barTime, spb);
+    }
+  }
+  /* Writes the retrigger step into every source-made note, from each instrument's Retrig and Chance controls.
+     Which notes are chosen (when Chance is under 100) depends only on the seed, the bar and the note's place in it. */
+  function applyRetrig() {
+    if (!eng.edl) { return; }
+    eng.edl.bars.forEach(function (bar) {
+      (bar.synth || []).forEach(function (e, k) {
+        if (e.s === undefined || !SND[e.voice]) { return; }
+        var P = sound(e.voice), step = RETRIG_STEPS[P.rtg] || 0;
+        var lucky = rng32((barSeed(eng.seed, bar.n, bar.regen) ^ 0x7E7216 ^ Math.imul(k + 1, 0x9E3779B1)) >>> 0)() * 100 < P.rchance;
+        if (step && lucky && e.d > step + 0.001) { e.rt = step; } else { delete e.rt; }
+      });
+    });
+  }
+  function scheduleSynth(e, barTime, spb) {
+    if (e.s === undefined ? eng.mute.SYNTH : eng.mute[e.voice]) { return; }
+    if (!SND[e.voice]) { return; }
+    var clip = null;
+    if (e.s !== undefined) { clip = clips[e.s]; if (!clip) { loadClip(e.s).catch(function () {}); return; } }
+    var P = sound(e.voice, !clip);
+    var desk = clip ? eng.inp[e.voice] : eng.bus.SYNTH;                  // this note's own channel in the mixer
+    var when = barTime + e.t * spb, dur = e.d * spb * (e.voice === "SUB" ? P.len / 100 : 1);
+    var f = 440 * Math.pow(2, (e.note - 69) / 12 + (e.cents || 0) / 1200);
+    function ends(o, lv, at, until) {
+      o.start.apply(o, at); o.stop(until);
+      eng.live.push(o);
+      o.onended = function () { var k = eng.live.indexOf(o); if (k >= 0) { eng.live.splice(k, 1); } lv.disconnect(); };
+      return o;
+    }
+    function osc(type, freq, level, into) {
+      var o = actx.createOscillator(), lv = actx.createGain();
+      o.type = type; o.frequency.setValueAtTime(freq, when); lv.gain.value = level;
+      o.connect(lv); lv.connect(into);
+      return ends(o, lv, [when], when + dur + 0.02);
+    }
+    /* The source slice in place of an oscillator. It plays at a pitch-shifting rate that goes from 'from' to 'to' over
+       'slide' seconds (a slide between notes); with no slide, the panel's Bend does the same from Bend semitones away.
+       Start: where in the slice it begins. Reverse: backwards. Loop: repeat only a tiny piece. Stretch: instead of
+       looping, creep through the slice in overlapping grains, so the pitch and the place in the slice are separate. */
+    function src(from, to, slide, into) {
+      var bent = from === to && P.bend !== 0;
+      if (bent) { from = to * Math.pow(2, P.bend / 12); slide = P.btime / 1000; }
+      var moving = from !== to && slide >= 0.001, L = clip.duration, off = P.pos / 100 * L;
+      if (!moving) { from = to; }
+      if (P.grain > 0) {                                                 // stretch: grains, half overlapping
+        var size = Math.max(0.02, P.grain / 1000), hop = size / 2, count = Math.max(1, Math.ceil(dur / hop));
+        var span = Math.max(0, L - off - size * to), buffer = P.back ? reversedSlice(e.s) : clip;
+        for (var k = 0; k < count; k++) {
+          var gr = actx.createBufferSource(), win = actx.createGain(), t0 = when + k * hop, tau = k * hop;
+          gr.buffer = buffer;
+          gr.playbackRate.value = moving && tau < slide ? from * Math.pow(to / from, tau / slide) : to;
+          win.gain.setValueCurveAtTime(hann(), t0, size);
+          gr.connect(win); win.connect(into);
+          ends(gr, win, [t0, off + span * k / count], t0 + size + 0.005);
+        }
+        return;
+      }
+      var o = actx.createBufferSource(), lv = actx.createGain(), begin = (P.back ? L : 0) + off;
+      o.buffer = pingPong(e.s); o.loop = true;
+      if (P.loop > 0) { o.loopStart = begin; o.loopEnd = Math.min(2 * L, begin + P.loop / 1000); }
+      o.playbackRate.setValueAtTime(from, when);
+      if (moving) { o.playbackRate.exponentialRampToValueAtTime(to, when + slide); }
+      o.connect(lv); lv.connect(into);
+      ends(o, lv, [when, begin], when + dur + 0.02);
+    }
+    function lowpass(cutoff, q) {
+      var lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = cutoff; lp.Q.value = q || 0;
+      return lp;
+    }
+    function driven(node, amount) {       // returns the node to connect onwards: with drive, a wave shaper after 'node'
+      if (!(amount > 0)) { return node; }
+      var shaper = actx.createWaveShaper(); shaper.curve = driveCurve(amount); node.connect(shaper);
+      return shaper;
+    }
+    function fades(gain, peak, attack, release) {                        // straight fade in and out, flat between
+      gain.setValueAtTime(0, when);
+      gain.linearRampToValueAtTime(peak, when + attack);
+      gain.setValueAtTime(peak, when + dur - release);
+      gain.linearRampToValueAtTime(0, when + dur);
+    }
+
+    if (e.voice === "ACID") {              // through two resonant lowpass filters; the cutoff snaps down on every note
+      if (dur < ACID_ATTACK + ACID_RELEASE) { return; }
+      var accent = e.acc ? P.acc / 100 : 0, glide = P.slide / 1000;
+      var top = Math.min(18000, P.cut * Math.pow(ACID_PEAK / ACID_BASE, P.env / 100) * (1 + (ACID_ACCENT - 1) * accent));
+      var gate = actx.createGain(), lpA = lowpass(top, P.res), lpB = lowpass(top, P.res);
+      [lpA, lpB].forEach(function (lp) {
+        lp.frequency.setValueAtTime(top, when);
+        lp.frequency.exponentialRampToValueAtTime(P.cut, when + P.dec / 1000);
+      });
+      var trim = Math.pow(10, -(P.res - ACID_Q) / 20);                   // more resonance is turned down to stay about as loud
+      fades(gate.gain, e.g * trim * (e.acc ? (1 + 0.4 * accent) / 1.4 : 1), ACID_ATTACK, ACID_RELEASE);
+      lpA.connect(lpB); lpB.connect(gate);
+      if (clip) { var loud = actx.createGain(); loud.gain.value = ACID_OUT; driven(gate, P.dist).connect(loud); loud.connect(desk); }
+      else { gate.connect(desk); }
+      if (clip) {
+        src(e.rate0 || e.rate, e.rate, glide, lpA);                                                          // slide
+        if (P.body > 0) {                                                // body: the same again an octave down
+          var under = actx.createGain(); under.gain.value = P.body / 100; under.connect(lpA);
+          src((e.rate0 || e.rate) / 2, e.rate / 2, glide, under);
+        }
+        return;
+      }
+      var fa = e.from === undefined ? f : 440 * Math.pow(2, (e.from - 69) / 12);
+      var saw = osc("sawtooth", fa, 1, lpA);
+      if (fa !== f) { saw.frequency.exponentialRampToValueAtTime(f, when + glide); }                         // slide
+      return;
+    }
+    if (e.voice === "BOX") {               // struck, then dying away (oscillator: sine + quiet third harmonic)
+      if (dur < 0.02) { return; }
+      var box = actx.createGain(), attack = Math.min(P.att / 1000, dur / 2);
+      box.gain.setValueAtTime(0, when);
+      box.gain.linearRampToValueAtTime(e.g, when + attack);
+      box.gain.exponentialRampToValueAtTime(e.g * BOX_FLOOR, when + attack + (dur - attack) * P.dec / 100);
+      driven(box, clip ? P.dist : 0).connect(desk);
+      if (clip) {
+        var into = box, pitch = e.rate * Math.pow(2, P.tune / 12);
+        if (P.bright < 16000) { into = lowpass(P.bright); into.connect(box); }                               // brightness
+        src(pitch, pitch, 0, into);
+        return;
+      }
+      osc("sine", f, 1, box); osc("sine", f * 3, BOX_THIRD_MIX, box);
+      return;
+    }
+    if (e.voice === "REESE") {             // two copies, detuned either side of the note, through a lowpass
+      if (dur < REESE_ATTACK + REESE_RELEASE) { return; }
+      var res = clip ? P.res : 0, ramp = actx.createGain(), lp = lowpass(P.cut, res), spread = Math.pow(2, P.det / 1200);
+      fades(ramp.gain, e.g * Math.pow(10, -res / 40), REESE_ATTACK, REESE_RELEASE);
+      lp.connect(ramp); driven(ramp, P.dist).connect(desk);
+      if (clip) {
+        // Width: one copy leans left, the other right. near/far are each copy's level in its own / the other speaker.
+        var near = 0.5 * (1 + P.width / 100), far = 0.5 * (1 - P.width / 100), join = actx.createChannelMerger(2);
+        join.connect(lp);
+        [[e.rate * spread, near, far], [e.rate / spread, far, near]].forEach(function (copy) {
+          var both = actx.createGain(), split = actx.createChannelSplitter(2), left = actx.createGain(), right = actx.createGain();
+          both.channelCount = 2; both.channelCountMode = "explicit"; both.channelInterpretation = "speakers";   // mono slices play in both speakers
+          left.gain.value = copy[1]; right.gain.value = copy[2];
+          both.connect(split); split.connect(left, 0); split.connect(right, 1); left.connect(join, 0, 0); right.connect(join, 0, 1);
+          src(copy[0], copy[0], 0, both);
+        });
+        return;
+      }
+      osc("sawtooth", f * spread, 0.5, lp); osc("sawtooth", f / spread, 0.5, lp);
+      return;
+    }
+    if (e.voice !== "SUB") { return; }
+    if (dur < SUB_ATTACK + SUB_RELEASE) { return; }
+    var amp = actx.createGain(), ring = clip ? P.res : 0;
+    fades(amp.gain, e.g * Math.pow(10, -ring / 40), SUB_ATTACK, SUB_RELEASE);
+    driven(amp, P.drive).connect(desk);
+    if (clip) {                            // the slice pitched down, through a lowpass: bass made from the source
+      var low = lowpass(P.cut, ring), shift = Math.pow(2, P.oct + P.tune / 12);
+      low.connect(amp);
+      src((e.rate0 || e.rate) * shift, e.rate * shift, SUB_GLIDE, low);                                   // portamento
+      return;
+    }
+    var f0 = e.from === undefined ? f : 440 * Math.pow(2, (e.from - 69) / 12);
+    [[1, 1], [2, SUB_OCTAVE_MIX]].forEach(function (part) {      // sine plus a quieter sine one octave up
+      var tone = osc("sine", f0 * part[0], part[1], amp);
+      if (f0 !== f) { tone.frequency.exponentialRampToValueAtTime(f * part[0], when + SUB_GLIDE); }          // portamento
+    });
+  }
+  /* Added drum kit. Written twice with the same sums: here, and in render.py (the added-drums block).
+     Each hit plays one sample from the drumnbasskit folder: peak brought to 1, times the drum's fixed level, the
+     hit's own level and the panel level. Kick and snare can be tuned (played faster or slower). A hit plays to the
+     end of its sample, except an open hat with a length (d), which the next hat cuts off. */
+  function scheduleDrum(d, barTime, spb) {
+    if (eng.mute.DRUMS || !DRUM_PICK[d.drum]) { return; }
+    var P = sound("DRUMS"), n = P[DRUM_PICK[d.drum]], hit = eng.kit[d.drum + n];
+    if (!hit) { loadDrum(d.drum, n).catch(function () {}); return; }          // not loaded yet: skip this once
+    var g = d.g * DRUM_G[d.drum] * level(P[DRUM_LEVEL[d.drum]]) * hit.norm, when = barTime + d.t * spb;
+    if (!(g > 0)) { return; }
+    var node = actx.createBufferSource(), amp = actx.createGain();
+    node.buffer = hit.buf; amp.gain.setValueAtTime(g, when);
+    node.playbackRate.value = Math.pow(2, (d.drum === "K" ? P.ktune : d.drum === "S" ? P.sst : 0) / 12);
+    node.connect(amp); amp.connect(eng.inp.DRUMS);
+    node.start(when);
+    if (d.d !== undefined) {                                                   // cut off by the next hat
+      var end = when + d.d * spb;
+      amp.gain.setValueAtTime(g, end); amp.gain.linearRampToValueAtTime(0, end + DRUM_CHOKE);
+      node.stop(end + DRUM_CHOKE + 0.005);
+    }
+    eng.live.push(node);
+    node.onended = function () { var k = eng.live.indexOf(node); if (k >= 0) { eng.live.splice(k, 1); } amp.disconnect(); };
+  }
+  function tick() {
+    var bars = eng.edl.bars, spb = 60 / eng.bpm;
+    while (eng.nextTime < actx.currentTime + 0.25) {
+      var bar = bars[eng.next % bars.length], at = eng.nextTime;
+      bar.events.forEach(function (e) { scheduleEvent(e, at, spb); });
+      (bar.synth || []).forEach(function (e) { playNote(e, at, spb); });
+      (bar.drums || []).forEach(function (d) { scheduleDrum(d, at, spb); });
+      eng.marks.push({ k: eng.next % bars.length, at: at });
+      eng.nextTime += bar.beats * spb;
+      eng.next++;
+    }
+  }
+  function followBar() {
+    if (!eng.playing) { return; }
+    var now = actx.currentTime, k = eng.shown;
+    while (eng.marks.length && eng.marks[0].at <= now) { k = eng.marks.shift().k; }
+    if (k !== eng.shown) {
+      var cells = $("bars").children;
+      if (cells[eng.shown]) { cells[eng.shown].classList.remove("now"); }
+      if (cells[k]) { cells[k].classList.add("now"); }
+      eng.shown = k;
+    }
+    requestAnimationFrame(followBar);
+  }
+  function startEngine() {
+    if (!eng.edl || eng.starting) { return; }
+    eng.starting = true;
+    loadKit().then(function () { eng.starting = false; startNow(); },
+                   function () { eng.starting = false; log("Could not load the slices for the break.", true); });
+  }
+  function startNow() {
+    if (!eng.edl || eng.playing) { return; }
+    clearTimeout(stopTimer); vid.pause();
+    if (asrc) { try { asrc.stop(); } catch (e) {} asrc = null; }
+    if (actx.state === "suspended") { actx.resume(); }
+    buildBus();
+    eng.playing = true; eng.next = eng.sel >= 0 ? eng.sel : 0; eng.nextTime = actx.currentTime + 0.08; eng.marks = [];
+    tick(); eng.timer = setInterval(tick, 25);
+    $("engPlay").textContent = "Stop"; $("engPlay").className = "on";
+    requestAnimationFrame(followBar);
+  }
+  function stopEngine() {
+    if (!eng.playing) { return; }
+    eng.playing = false; clearInterval(eng.timer);
+    eng.live.slice().forEach(function (n) { try { n.stop(); } catch (e) {} });
+    eng.live = []; eng.marks = [];
+    var cells = $("bars").children; if (cells[eng.shown]) { cells[eng.shown].classList.remove("now"); }
+    eng.shown = -1;
+    $("engPlay").textContent = "Play"; $("engPlay").className = "";
+  }
+  function toggleEngine() { if (eng.playing) { stopEngine(); } else { startEngine(); } }
+
+  /* ---- render: send the edit list to the server, get an MP4 back ------- */
+  function showSourceVideo() {
+    if (!cur || cur.view === "source") { return; }
+    cur.view = "source";
+    vid.src = "/media/" + cur.meta.id + "/source.mp4"; vid.load();
+    $("title").textContent = cur.meta.title;
+  }
+  /* ---- export: audio only, silent video, or both. One job on the server, the same edit list for all three ---- */
+  var EXPORT_NAMES = { audio: "Audio export", video: "Video export (silent)", both: "Audio + video export" };
+  function exportButtons(off) {
+    Array.prototype.forEach.call(document.querySelectorAll(".exp"), function (b) { b.disabled = off; });
+  }
+  function pollRender(id, seen, mode) {
+    api("/api/render/job/" + id).then(function (res) {
+      var job = res.data;
+      for (; seen < job.log.length - (job.state === "running" ? 1 : 0); seen++) {
+        log(job.log[seen].msg, job.log[seen].msg.indexOf("ERROR") === 0, job.log[seen].t);
+      }
+      if (job.state === "running") {
+        var last = job.log.length ? job.log[job.log.length - 1].msg : "";
+        setStatus(EXPORT_NAMES[mode] + " " + Math.floor(job.progress) + "%", last, job.progress);
+        setTimeout(function () { pollRender(id, seen, mode); }, 400);
+        return;
+      }
+      exportButtons(false);
+      if (job.state !== "done") { setStatus(EXPORT_NAMES[mode] + " failed - see log"); return; }
+      var r = job.result, file = r.mp4 || r.wav;
+      setStatus(EXPORT_NAMES[mode] + " done", r.seconds + " s" + (r.drift_ms === null ? "" : "  /  drift " + r.drift_ms + " ms"));
+      log(EXPORT_NAMES[mode] + " saved in the renders folder: " + file +
+          " (plus " + (r.mp4 && r.wav ? ".wav, " : "") + ".edl.json, .log.txt)");
+      if (cur && cur.meta.id === id) {              // show (or play) the result in the preview screen
+        stopEngine();
+        cur.view = "render";
+        vid.src = "/renders/" + file; vid.load(); vid.muted = false;
+        $("title").textContent = "EXPORT  /  " + file + (mode === "audio" ? "  (sound only)" : mode === "video" ? "  (silent)" : "");
+        window.scrollTo(0, 0);
+        var playing = vid.play(); if (playing && playing.catch) { playing.catch(function () {}); }
+      }
+    }).catch(function () { exportButtons(false); offline(); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".exp"), function (button) {
+    button.addEventListener("click", function () {
+      if (!eng.edl || !cur) { return; }
+      readParams(); eng.edl.bpm = eng.bpm;
+      var id = cur.meta.id, mode = button.dataset.mode;
+      exportButtons(true);
+      stopEngine();
+      api("/api/render", { method: "POST", headers: { "Content-Type": "application/json" },
+                           body: JSON.stringify({ edl: eng.edl, mode: mode }) })
+        .then(function (res) {
+          if (!res.data.ok) { exportButtons(false); log(res.data.error, true); return; }
+          log(EXPORT_NAMES[mode] + " started.");
+          setStatus(EXPORT_NAMES[mode] + " 0%");
+          pollRender(id, 0, mode);
+        }).catch(function () { exportButtons(false); offline(); });
+    });
+  });
+
+  /* ---- light / dark ---------------------------------------------------- */
+  function showTheme() { $("theme").textContent = document.documentElement.dataset.theme === "dark" ? "Light" : "Dark"; }
+  $("theme").addEventListener("click", function () {
+    var dark = document.documentElement.dataset.theme !== "dark";
+    if (dark) { document.documentElement.dataset.theme = "dark"; } else { delete document.documentElement.dataset.theme; }
+    try { localStorage.setItem("breakshredder-theme", dark ? "dark" : "light"); } catch (e) {}
+    showTheme();
+    if (cur && cur.a) { renderPads(); }             // waveforms and bar drawings are painted in the text colour:
+    if (eng.edl) { paintBars(); }                   // redraw the one page of pads and the bars in the new colour
+  });
+  showTheme();
+
+  window.BREAKSHREDDER = { edl: function () { return eng.edl; } };   // for inspection in the browser console
+  buildOps();
+  buildMixer();
+  buildSound();
+  loadKitList();
+  loadStatus();
+  loadCache();
+})();
+</script>
+</body>
+</html>
