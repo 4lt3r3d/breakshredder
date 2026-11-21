@@ -1371,7 +1371,7 @@ input[type=range]:hover::-webkit-slider-thumb { background: var(--hi); outline: 
       if (d.drum === "K" || d.drum === "S") { g.fillRect(Math.round(d.t / bar.beats * W), 0, d.drum === "K" ? 5 : 2, 3); }
     });
     (bar.synth || []).forEach(function (e) {          // synth notes: a strip along the bottom edge
-      g.globalAlpha = (e.s === undefined ? eng.mute.SYNTH : eng.mute[e.voice]) ? 0.15 : 1;
+      g.globalAlpha = (eng.mute[e.voice] || (e.s === undefined && eng.mute.SYNTH)) ? 0.15 : 1;
       g.fillRect(e.t / bar.beats * W, H - 4, Math.max(2, e.d / bar.beats * W - 2), 4);
     });
   }
@@ -1753,7 +1753,7 @@ input[type=range]:hover::-webkit-slider-thumb { background: var(--hi); outline: 
     });
   }
   function scheduleSynth(e, barTime, spb) {
-    if (e.s === undefined ? eng.mute.SYNTH : eng.mute[e.voice]) { return; }
+    if (eng.mute[e.voice] || (e.s === undefined && eng.mute.SYNTH)) { return; }   // oscillator copy needs both switches on
     if (!SND[e.voice]) { return; }
     var clip = null;
     if (e.s !== undefined) { clip = clips[e.s]; if (!clip) { loadClip(e.s).catch(function () {}); return; } }

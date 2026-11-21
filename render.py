@@ -197,8 +197,8 @@ def render(edl, analysis, cache_dir, renders_dir, ffmpeg, name, progress, fps=30
                 drums.append({"when": (beat + float(d["t"])) * spb, "drum": d.get("drum"), "g": float(d.get("g", 1)),
                               "s": pic_slice, "d": float(d["d"]) * spb if "d" in d else None})
         for e in bar.get("synth") or []:
-            if mute.get("SYNTH") if "s" not in e else mute.get(e.get("voice")):
-                continue                          # source notes follow their voice switch, oscillator notes the Synth switch
+            if mute.get(e.get("voice")) or ("s" not in e and mute.get("SYNTH")):
+                continue                          # oscillator copies need both their voice switch and the Synth switch on
             if "s" in e and not 0 <= int(e["s"]) < len(slices):
                 raise RenderError("The edit list points at a slice that no longer exists. Press Generate and retry.")
             # A note with a retrigger step ("rt", beats) is a row of short notes that each start the sound again:
