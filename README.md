@@ -18,6 +18,24 @@ Tools are looked for in `bin` first, then PATH, then the paths in `config.json`.
 2. Optionally set In and Out, then press Analyze.
 3. In Break engine: Play to hear the arrangement, Render MP4 to export it.
 
+## Use your own sounds
+
+The added drum kit (off by default, switch it on in the page) plays the `.wav` files in `drumnbasskit\`.
+Files are found by name and number, counting from 1 with no gaps:
+
+| Drum | File |
+|---|---|
+| Kick | `drumnbasskit\kicks\kick N.wav` |
+| Snare | `drumnbasskit\snares & claps\snare N.wav` |
+| Clap | `drumnbasskit\snares & claps\clap N.wav` |
+| Closed hat | `drumnbasskit\hi hats\hat N.wav` |
+| Open hat | `drumnbasskit\hi hats\open hat N.wav` |
+| Percs | `drumnbasskit\percs\perc N.wav` |
+
+- **Add a sound:** save it as the next number (for example `kick 31.wav` if there are 30 kicks). Its slider in the Drums panel goes up to the new number.
+- **Replace a sound:** overwrite a file with your own under the same name.
+- Restart `start.bat` and refresh the page after changing files.
+
 ## Folders
 
 - `bin\` helper programs

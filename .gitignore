@@ -3,6 +3,5 @@ __pycache__/
 cache/
 renders/
 bin/*.exe
-drumnbasskit/
 .claude/settings.local.json
 .DS_Store
